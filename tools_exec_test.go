@@ -11,22 +11,25 @@ import (
 	"testing"
 )
 
-func projectDir(t *testing.T) string {
+func toolContext(t *testing.T) ToolContext {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return dir
+	return ToolContext{
+		ProjectDir: dir,
+		GitIgnore:  LoadGitIgnore(dir),
+	}
 }
 
 func TestGrepExecutor(t *testing.T) {
 	if _, err := exec.LookPath("rg"); err != nil {
 		t.Skip("rg not on PATH")
 	}
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"pattern": "func main"})
-	result, err := ExecuteTool(context.Background(), "grep", args, dir)
+	result, err := ExecuteTool(context.Background(), "grep", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -36,9 +39,9 @@ func TestGrepExecutor(t *testing.T) {
 }
 
 func TestFindFilesExecutor(t *testing.T) {
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"pattern": "*.go"})
-	result, err := ExecuteTool(context.Background(), "find_files", args, dir)
+	result, err := ExecuteTool(context.Background(), "find_files", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -51,25 +54,24 @@ func TestFindFilesExecutor(t *testing.T) {
 }
 
 func TestReadFileExecutor(t *testing.T) {
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"path": "main.go", "start_line": 1, "end_line": 10})
-	result, err := ExecuteTool(context.Background(), "read_file", args, dir)
+	result, err := ExecuteTool(context.Background(), "read_file", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(result, "package main") {
 		t.Errorf("expected 'package main' in output, got:\n%s", result)
 	}
-	// Verify line numbers present
 	if !strings.Contains(result, " | ") {
 		t.Errorf("expected line number formatting, got:\n%s", result)
 	}
 }
 
 func TestReadFileSandbox(t *testing.T) {
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"path": "../../etc/passwd"})
-	result, err := ExecuteTool(context.Background(), "read_file", args, dir)
+	result, err := ExecuteTool(context.Background(), "read_file", args, tc)
 	if err != nil {
 		t.Fatalf("expected nil Go error, got: %v", err)
 	}
@@ -79,23 +81,21 @@ func TestReadFileSandbox(t *testing.T) {
 }
 
 func TestReadFileNotFound(t *testing.T) {
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"path": "nonexistent.go"})
-	result, err := ExecuteTool(context.Background(), "read_file", args, dir)
+	result, err := ExecuteTool(context.Background(), "read_file", args, tc)
 	if err != nil {
 		t.Fatalf("expected nil Go error, got: %v", err)
 	}
 	if !strings.Contains(result, "not found") {
 		t.Errorf("expected 'not found' in error, got:\n%s", result)
 	}
-	// Should list sibling files
-	if !strings.Contains(result, "main.go") {
+	if !strings.Contains(result, "config.go") {
 		t.Errorf("expected sibling files listed, got:\n%s", result)
 	}
 }
 
 func TestReadFileTruncation(t *testing.T) {
-	// Create a temp file with >200 lines
 	dir := t.TempDir()
 	var content strings.Builder
 	for i := 0; i < 250; i++ {
@@ -103,8 +103,9 @@ func TestReadFileTruncation(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(dir, "big.txt"), []byte(content.String()), 0644)
 
+	tc := ToolContext{ProjectDir: dir, GitIgnore: LoadGitIgnore(dir)}
 	args := mustJSON(t, map[string]any{"path": "big.txt"})
-	result, err := ExecuteTool(context.Background(), "read_file", args, dir)
+	result, err := ExecuteTool(context.Background(), "read_file", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,9 +115,9 @@ func TestReadFileTruncation(t *testing.T) {
 }
 
 func TestListDirExecutor(t *testing.T) {
-	dir := projectDir(t)
+	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"depth": 1})
-	result, err := ExecuteTool(context.Background(), "list_dir", args, dir)
+	result, err := ExecuteTool(context.Background(), "list_dir", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -126,7 +127,8 @@ func TestListDirExecutor(t *testing.T) {
 }
 
 func TestExecuteToolUnknown(t *testing.T) {
-	result, err := ExecuteTool(context.Background(), "bogus", nil, "/tmp")
+	tc := ToolContext{ProjectDir: "/tmp", GitIgnore: LoadGitIgnore("/tmp")}
+	result, err := ExecuteTool(context.Background(), "bogus", nil, tc)
 	if err != nil {
 		t.Fatalf("expected nil Go error, got: %v", err)
 	}
@@ -140,7 +142,8 @@ func TestSubmitAnswer(t *testing.T) {
 		"results": []map[string]any{{"file": "main.go", "start_line": 1, "end_line": 10, "reason": "test"}},
 		"summary": "test summary",
 	})
-	_, err := ExecuteTool(context.Background(), "submit_answer", args, "/tmp")
+	tc := ToolContext{ProjectDir: "/tmp", GitIgnore: LoadGitIgnore("/tmp")}
+	_, err := ExecuteTool(context.Background(), "submit_answer", args, tc)
 	var submit *SubmitAnswerResult
 	if !errors.As(err, &submit) {
 		t.Fatalf("expected SubmitAnswerResult error, got: %v", err)

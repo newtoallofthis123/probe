@@ -51,32 +51,30 @@ func safePath(projectDir, requestedPath string) (string, error) {
 	return resolved, nil
 }
 
+// ToolContext carries shared state for tool executors.
+type ToolContext struct {
+	ProjectDir string
+	GitIgnore  *GitIgnore
+}
+
 // ExecuteTool dispatches a tool call to the appropriate executor.
 // Tool-level failures are returned as string results (first return value).
 // Go errors (second return value) mean the harness itself is broken.
-func ExecuteTool(ctx context.Context, name string, args json.RawMessage, projectDir string) (string, error) {
+func ExecuteTool(ctx context.Context, name string, args json.RawMessage, tc ToolContext) (string, error) {
 	switch name {
 	case "grep":
-		return execGrep(ctx, args, projectDir)
+		return execGrep(ctx, args, tc.ProjectDir)
 	case "find_files":
-		return execFindFiles(args, projectDir)
+		return execFindFiles(args, tc)
 	case "read_file":
-		return execReadFile(args, projectDir)
+		return execReadFile(args, tc)
 	case "list_dir":
-		return execListDir(args, projectDir)
+		return execListDir(args, tc)
 	case "submit_answer":
 		return "", &SubmitAnswerResult{RawArgs: args}
 	default:
 		return fmt.Sprintf("Error: unknown tool '%s'", name), nil
 	}
-}
-
-// skipDirs is the hardcoded list of directories to skip during traversal.
-var skipDirs = map[string]bool{
-	".git":         true,
-	"node_modules": true,
-	"vendor":       true,
-	".DS_Store":    true,
 }
 
 // --- execGrep ---
@@ -179,7 +177,7 @@ func splitRgLine(line, projectDir string) (pathLine string, content string, ok b
 
 // --- execFindFiles ---
 
-func execFindFiles(args json.RawMessage, projectDir string) (string, error) {
+func execFindFiles(args json.RawMessage, tc ToolContext) (string, error) {
 	var params struct {
 		Pattern string `json:"pattern"`
 		Type    string `json:"type"`
@@ -194,16 +192,20 @@ func execFindFiles(args json.RawMessage, projectDir string) (string, error) {
 	const maxResults = 100
 	var matches []string
 
-	filepath.WalkDir(projectDir, func(path string, d fs.DirEntry, err error) error {
+	filepath.WalkDir(tc.ProjectDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
-		if d.IsDir() && skipDirs[d.Name()] {
-			return filepath.SkipDir
+
+		rel, _ := filepath.Rel(tc.ProjectDir, path)
+		if rel == "." {
+			return nil
 		}
 
-		rel, _ := filepath.Rel(projectDir, path)
-		if rel == "." {
+		if tc.GitIgnore.IsIgnored(rel) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 
@@ -247,7 +249,7 @@ func execFindFiles(args json.RawMessage, projectDir string) (string, error) {
 
 // --- execReadFile ---
 
-func execReadFile(args json.RawMessage, projectDir string) (string, error) {
+func execReadFile(args json.RawMessage, tc ToolContext) (string, error) {
 	var params struct {
 		Path      string `json:"path"`
 		StartLine int    `json:"start_line"`
@@ -260,7 +262,11 @@ func execReadFile(args json.RawMessage, projectDir string) (string, error) {
 		return "Error: 'path' is required", nil
 	}
 
-	absPath, err := safePath(projectDir, params.Path)
+	if tc.GitIgnore.IsIgnored(params.Path) {
+		return fmt.Sprintf("Error: '%s' is in .gitignore and excluded from search", params.Path), nil
+	}
+
+	absPath, err := safePath(tc.ProjectDir, params.Path)
 	if err != nil {
 		return fmt.Sprintf("Error: %s", err), nil
 	}
@@ -344,7 +350,7 @@ func listSiblings(dir string) string {
 
 // --- execListDir ---
 
-func execListDir(args json.RawMessage, projectDir string) (string, error) {
+func execListDir(args json.RawMessage, tc ToolContext) (string, error) {
 	var params struct {
 		Path  string `json:"path"`
 		Depth int    `json:"depth"`
@@ -359,7 +365,7 @@ func execListDir(args json.RawMessage, projectDir string) (string, error) {
 		params.Depth = 2
 	}
 
-	absPath, err := safePath(projectDir, params.Path)
+	absPath, err := safePath(tc.ProjectDir, params.Path)
 	if err != nil {
 		return fmt.Sprintf("Error: %s", err), nil
 	}
@@ -373,11 +379,11 @@ func execListDir(args json.RawMessage, projectDir string) (string, error) {
 	}
 
 	var buf strings.Builder
-	buildTree(&buf, absPath, projectDir, "", 0, params.Depth)
+	buildTree(&buf, absPath, tc.ProjectDir, tc.GitIgnore, "", 0, params.Depth)
 	return buf.String(), nil
 }
 
-func buildTree(buf *strings.Builder, dir, projectDir, indent string, currentDepth, maxDepth int) {
+func buildTree(buf *strings.Builder, dir, projectDir string, gi *GitIgnore, indent string, currentDepth, maxDepth int) {
 	if currentDepth >= maxDepth {
 		return
 	}
@@ -387,23 +393,19 @@ func buildTree(buf *strings.Builder, dir, projectDir, indent string, currentDept
 		return
 	}
 
-	// Filter out skipped entries
-	var filtered []fs.DirEntry
 	for _, e := range entries {
-		if skipDirs[e.Name()] {
+		rel, _ := filepath.Rel(projectDir, filepath.Join(dir, e.Name()))
+		if gi.IsIgnored(rel) {
 			continue
 		}
-		filtered = append(filtered, e)
-	}
 
-	for _, e := range filtered {
 		if e.IsDir() {
-			// Count children for summary
 			childPath := filepath.Join(dir, e.Name())
 			children, _ := os.ReadDir(childPath)
 			childCount := 0
 			for _, c := range children {
-				if !skipDirs[c.Name()] {
+				cRel, _ := filepath.Rel(projectDir, filepath.Join(childPath, c.Name()))
+				if !gi.IsIgnored(cRel) {
 					childCount++
 				}
 			}
@@ -412,7 +414,7 @@ func buildTree(buf *strings.Builder, dir, projectDir, indent string, currentDept
 			if childCount > 10 && currentDepth+1 >= maxDepth {
 				fmt.Fprintf(buf, "%s  (%d entries)\n", indent, childCount)
 			} else {
-				buildTree(buf, childPath, projectDir, indent+"  ", currentDepth+1, maxDepth)
+				buildTree(buf, childPath, projectDir, gi, indent+"  ", currentDepth+1, maxDepth)
 			}
 		} else {
 			fmt.Fprintf(buf, "%s%s\n", indent, e.Name())
