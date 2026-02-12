@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 
@@ -103,6 +104,12 @@ func run() int {
 	// Load env vars for unset flags
 	cfg.loadEnv(flagSet)
 
+	// Check prerequisites
+	if err := canExecute(); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		return ExitError
+	}
+
 	// Resolve project dir
 	if err := cfg.resolveProjectDir(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
@@ -118,4 +125,11 @@ func run() int {
 
 	fmt.Fprintf(os.Stderr, "not implemented\n")
 	return ExitError
+}
+
+func canExecute() error {
+	if _, err := exec.LookPath("rg"); err != nil {
+		return fmt.Errorf("probe requires ripgrep (rg) to be installed. See https://github.com/BurntSushi/ripgrep#installation")
+	}
+	return nil
 }
