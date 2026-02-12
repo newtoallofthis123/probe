@@ -108,9 +108,26 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		msg := acc.ChatCompletion.Choices[0].Message
 		totalTokens += acc.ChatCompletion.Usage.TotalTokens
 
-		// No tool calls — LLM responded with text only
+		// No tool calls — LLM responded with text only, inject nudge to submit
 		if len(msg.ToolCalls) == 0 {
-			return &AgentResult{Turns: turn + 1}, nil
+			// Append the text response and nudge to call submit_answer
+			if msg.Content != "" {
+				messages = append(messages, openai.ChatCompletionMessageParamUnion{
+					OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+						Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+							OfString: openai.String(msg.Content),
+						},
+					},
+				})
+			}
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{
+						OfString: openai.String("You must call submit_answer to return your results. Do not respond with text. Call the submit_answer tool now."),
+					},
+				},
+			})
+			continue
 		}
 
 		// Check for submit_answer first
@@ -222,8 +239,11 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		)
 	}
 
-	// Exhausted max turns
-	return &AgentResult{Turns: cfg.MaxTurns}, nil
+	// Exhausted max turns without submit_answer
+	return &AgentResult{
+		Turns:   cfg.MaxTurns,
+		Summary: "Agent exhausted maximum turns without submitting an answer",
+	}, nil
 }
 
 // parseSubmitAnswer extracts an AgentResult from submit_answer arguments.

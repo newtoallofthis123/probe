@@ -26,7 +26,8 @@ func isSmallModel(model string) bool {
 func buildSmallPrompt(tc ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	return fmt.Sprintf(`Search the codebase for files matching the user's query.
-Use grep to find files, read_file to verify, then submit_answer.
+Use grep to find files, read_file to verify, then call submit_answer.
+You MUST call submit_answer when done — it is the only way to return results.
 Be precise with line numbers. Maximum 5 tool calls.
 
 %s`, tree)
@@ -81,11 +82,16 @@ Typical workflow:
 	buf.WriteString(`
 ## Output
 
-When you've found all relevant code, call submit_answer with:
+You MUST call submit_answer when you are done. This is the only way to return results.
+If you respond with text instead of calling submit_answer, the user sees nothing.
+
+When you've found relevant code, call submit_answer with:
 - Each relevant file, its line range, and why it's relevant
 - A brief summary of what you found
 
-Do not explain your search process. Just find the code.`)
+If you found nothing relevant, call submit_answer with an empty results array.
+
+Do not explain your search process. Just find the code and submit_answer.`)
 	return buf.String()
 }
 

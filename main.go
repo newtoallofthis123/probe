@@ -140,6 +140,13 @@ func run() int {
 		if cfg.OutputFormat == "json" {
 			fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor))
 		}
+		if !cfg.Quiet {
+			if result.Summary != "" {
+				fmt.Fprintf(os.Stderr, "No results: %s\n", result.Summary)
+			} else {
+				fmt.Fprintf(os.Stderr, "No results found.\n")
+			}
+		}
 		return ExitNoResult
 	}
 
