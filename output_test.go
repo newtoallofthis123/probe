@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
 
 func TestSummarizeToolCall(t *testing.T) {
 	tests := []struct {
@@ -94,6 +98,121 @@ func TestProgressShouldShow(t *testing.T) {
 	p = &Progress{quiet: false, isTTY: false, verbose: true}
 	if !p.shouldShow() {
 		t.Error("verbose should force show")
+	}
+}
+
+func TestFormatResultsHumanTTY(t *testing.T) {
+	result := &AgentResult{
+		Results: []SearchResult{
+			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "entry point"},
+			{File: "agent.go", StartLine: 5, EndLine: 20, Reason: "agent loop"},
+		},
+		Summary: "found stuff",
+		Turns:   2,
+	}
+	out := FormatResults(result, "human", true, false)
+	if !strings.Contains(out, "main.go:1-10") {
+		t.Errorf("expected main.go:1-10, got %q", out)
+	}
+	if !strings.Contains(out, "entry point") {
+		t.Errorf("expected reason in TTY output")
+	}
+}
+
+func TestFormatResultsHumanPipe(t *testing.T) {
+	result := &AgentResult{
+		Results: []SearchResult{
+			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "entry point"},
+		},
+	}
+	out := FormatResults(result, "human", false, false)
+	if out != "main.go:1-10\n" {
+		t.Errorf("pipe output should be path:lines only, got %q", out)
+	}
+	if strings.Contains(out, "entry point") {
+		t.Error("pipe output should not contain reasons")
+	}
+}
+
+func TestFormatResultsJSON(t *testing.T) {
+	result := &AgentResult{
+		Results: []SearchResult{
+			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "test"},
+		},
+		Summary: "found",
+		Turns:   1,
+	}
+	// Pretty (TTY)
+	out := FormatResults(result, "json", true, false)
+	var parsed AgentResult
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("TTY JSON not valid: %v", err)
+	}
+	if len(parsed.Results) != 1 {
+		t.Errorf("expected 1 result, got %d", len(parsed.Results))
+	}
+
+	// Compact (pipe)
+	out = FormatResults(result, "json", false, false)
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("pipe JSON not valid: %v", err)
+	}
+	if strings.Contains(out, "\n  ") {
+		t.Error("pipe JSON should be compact")
+	}
+}
+
+func TestFormatResultsJSONEmpty(t *testing.T) {
+	result := &AgentResult{
+		Results: nil,
+		Summary: "No relevant code found",
+		Turns:   3,
+	}
+	out := FormatResults(result, "json", false, false)
+	var parsed AgentResult
+	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
+		t.Fatalf("empty JSON not valid: %v", err)
+	}
+	if parsed.Results != nil {
+		t.Errorf("expected null results in empty case")
+	}
+}
+
+func TestFormatResultsPaths(t *testing.T) {
+	result := &AgentResult{
+		Results: []SearchResult{
+			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "a"},
+			{File: "main.go", StartLine: 20, EndLine: 30, Reason: "b"},
+			{File: "agent.go", StartLine: 5, EndLine: 15, Reason: "c"},
+		},
+	}
+	out := FormatResults(result, "paths", false, false)
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Errorf("expected 2 deduplicated paths, got %d: %v", len(lines), lines)
+	}
+	if lines[0] != "main.go" || lines[1] != "agent.go" {
+		t.Errorf("unexpected paths: %v", lines)
+	}
+}
+
+func TestFormatResultsHumanColor(t *testing.T) {
+	result := &AgentResult{
+		Results: []SearchResult{
+			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "test"},
+		},
+	}
+	out := FormatResults(result, "human", true, true)
+	if !strings.Contains(out, "\033[1;36m") {
+		t.Error("expected ANSI color codes in colored output")
+	}
+}
+
+func TestFormatResultsEmpty(t *testing.T) {
+	result := &AgentResult{Results: nil}
+	out := FormatResults(result, "human", true, true)
+	if out != "" {
+		t.Errorf("expected empty string for no results in human format, got %q", out)
 	}
 }
 

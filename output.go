@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -220,6 +221,105 @@ func summarizeToolResult(name string, result string) string {
 	default:
 		return fmt.Sprintf("%d lines", len(lines))
 	}
+}
+
+// FormatResults formats agent results for output based on format, TTY, and color settings.
+func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnabled bool) string {
+	if len(result.Results) == 0 {
+		if format == "json" {
+			return formatJSON(result, stdoutTTY)
+		}
+		return ""
+	}
+
+	switch format {
+	case "json":
+		return formatJSON(result, stdoutTTY)
+	case "paths":
+		return formatPaths(result)
+	default:
+		return formatHuman(result, stdoutTTY, colorEnabled)
+	}
+}
+
+func formatJSON(result *AgentResult, pretty bool) string {
+	var data []byte
+	if pretty {
+		data, _ = json.MarshalIndent(result, "", "  ")
+	} else {
+		data, _ = json.Marshal(result)
+	}
+	return string(data) + "\n"
+}
+
+func formatPaths(result *AgentResult) string {
+	seen := make(map[string]bool)
+	var b strings.Builder
+	for _, r := range result.Results {
+		if !seen[r.File] {
+			seen[r.File] = true
+			b.WriteString(r.File)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func formatHuman(result *AgentResult, stdoutTTY bool, colorEnabled bool) string {
+	var b strings.Builder
+
+	if !stdoutTTY {
+		// Pipe: file:start-end only, no reasons, no colors
+		for _, r := range result.Results {
+			fmt.Fprintf(&b, "%s:%d-%d\n", r.File, r.StartLine, r.EndLine)
+		}
+		return b.String()
+	}
+
+	// TTY: column-aligned with optional color
+	// Find max width of "file:start-end" for alignment
+	type entry struct {
+		loc    string
+		reason string
+	}
+	entries := make([]entry, len(result.Results))
+	maxLoc := 0
+	for i, r := range result.Results {
+		entries[i].loc = fmt.Sprintf("%s:%d-%d", r.File, r.StartLine, r.EndLine)
+		entries[i].reason = r.Reason
+		if len(entries[i].loc) > maxLoc {
+			maxLoc = len(entries[i].loc)
+		}
+	}
+
+	useColor := colorEnabled && stdoutTTY
+	for _, e := range entries {
+		if useColor {
+			// bold+cyan path, yellow lines, dim reason
+			// Split loc into path and line range
+			colonIdx := strings.LastIndex(e.loc, ":")
+			path := e.loc[:colonIdx]
+			lines := e.loc[colonIdx:]
+			fmt.Fprintf(&b, "\033[1;36m%s\033[33m%s\033[0m", path, lines)
+			padding := maxLoc - len(e.loc) + 4
+			for j := 0; j < padding; j++ {
+				b.WriteByte(' ')
+			}
+			fmt.Fprintf(&b, "\033[2m%s\033[0m\n", e.reason)
+		} else {
+			fmt.Fprintf(&b, "%-*s    %s\n", maxLoc, e.loc, e.reason)
+		}
+	}
+	return b.String()
+}
+
+// PrintSummary prints a summary line to stderr (unless quiet).
+func (p *Progress) PrintSummary(resultCount int) {
+	if p.quiet {
+		return
+	}
+	elapsed := time.Since(p.start)
+	fmt.Fprintf(os.Stderr, "Found %d results in %.1fs\n", resultCount, elapsed.Seconds())
 }
 
 // extractJSONField does a quick-and-dirty extraction of a string field from JSON.

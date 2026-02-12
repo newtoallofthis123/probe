@@ -137,12 +137,14 @@ func run() int {
 	progress.OnDone(result.Turns)
 
 	if len(result.Results) == 0 {
+		if cfg.OutputFormat == "json" {
+			fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor))
+		}
 		return ExitNoResult
 	}
 
-	for _, r := range result.Results {
-		fmt.Printf("%s:%d-%d  %s\n", r.File, r.StartLine, r.EndLine, r.Reason)
-	}
+	fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor))
+	progress.PrintSummary(len(result.Results))
 	return ExitFound
 }
 
