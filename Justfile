@@ -22,6 +22,18 @@ test-one NAME:
 run *ARGS:
     go run . {{ARGS}}
 
+# Run against a target directory
+run-on DIR *ARGS:
+    go run . --dir {{DIR}} {{ARGS}}
+
+# Run with verbose output
+run-v *ARGS:
+    go run . --verbose {{ARGS}}
+
+# Run integration tests (requires Ollama)
+test-integration:
+    go test -tags integration -v -timeout 120s
+
 # Clean build artifacts
 clean:
     rm -f probe

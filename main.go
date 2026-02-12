@@ -55,8 +55,6 @@ func run() int {
 			os.Exit(1)
 		}
 	}()
-	_ = ctx // will be used by agent loop in later tickets
-
 	// Flag parsing
 	cfg := defaultConfig()
 	var showVersion bool
@@ -121,10 +119,28 @@ func run() int {
 		flag.Usage()
 		return ExitError
 	}
-	_ = flag.Arg(0) // query — used by agent loop in later tickets
+	query := flag.Arg(0)
 
-	fmt.Fprintf(os.Stderr, "not implemented\n")
-	return ExitError
+	// Build tool context
+	toolCtx := ToolContext{
+		ProjectDir: cfg.ProjectDir,
+		GitIgnore:  LoadGitIgnore(cfg.ProjectDir),
+	}
+
+	result, err := RunAgent(ctx, query, &cfg, toolCtx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return ExitError
+	}
+
+	if len(result.Results) == 0 {
+		return ExitNoResult
+	}
+
+	for _, r := range result.Results {
+		fmt.Printf("%s:%d-%d  %s\n", r.File, r.StartLine, r.EndLine, r.Reason)
+	}
+	return ExitFound
 }
 
 func canExecute() error {
