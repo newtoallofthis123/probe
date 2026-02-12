@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 
@@ -31,7 +30,7 @@ type AgentResult struct {
 // RunAgent executes the agent loop: sends the query to the LLM, handles tool
 // calls iteratively, and returns results when submit_answer is called or the
 // turn limit is reached.
-func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContext) (*AgentResult, error) {
+func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContext, progress *Progress) (*AgentResult, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" && isLocalhost(cfg.BaseURL) {
 		apiKey = "ollama"
@@ -89,6 +88,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		}
 
 		// Stream the response
+		progress.StartSpinner("Searching...")
 		stream := client.Chat.Completions.NewStreaming(ctx, params)
 		acc := openai.ChatCompletionAccumulator{}
 
@@ -96,6 +96,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 			chunk := stream.Current()
 			acc.AddChunk(chunk)
 		}
+		progress.StopSpinner()
 		if err := stream.Err(); err != nil {
 			return &AgentResult{Turns: turn}, fmt.Errorf("LLM API error: %w", err)
 		}
@@ -148,6 +149,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		var execErr error
 
 		for i, tc := range msg.ToolCalls {
+			progress.OnToolCall(tc.Function.Name, tc.Function.Arguments)
 			wg.Add(1)
 			go func(idx int, tc openai.ChatCompletionMessageToolCall) {
 				defer wg.Done()
@@ -155,7 +157,6 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
-					// submit_answer returns as error — shouldn't happen here since we checked above
 					var sa *SubmitAnswerResult
 					if errors.As(err, &sa) {
 						return
@@ -164,6 +165,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 					return
 				}
 				results[idx] = toolResult{id: tc.ID, result: res}
+				progress.OnToolResult(tc.Function.Name, res)
 			}(i, tc)
 		}
 		wg.Wait()
@@ -213,7 +215,11 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 			consecutiveEmpty = 0
 		}
 
-		fmt.Fprintf(os.Stderr, "turn %d: %d tool call(s)\n", turn+1, len(msg.ToolCalls))
+		progress.OnTokenUsage(
+			acc.ChatCompletion.Usage.PromptTokens,
+			acc.ChatCompletion.Usage.CompletionTokens,
+			totalTokens,
+		)
 	}
 
 	// Exhausted max turns

@@ -127,11 +127,14 @@ func run() int {
 		GitIgnore:  LoadGitIgnore(cfg.ProjectDir),
 	}
 
-	result, err := RunAgent(ctx, query, &cfg, toolCtx)
+	progress := NewProgress(&cfg)
+	result, err := RunAgent(ctx, query, &cfg, toolCtx, progress)
 	if err != nil {
+		progress.StopSpinner()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		return ExitError
 	}
+	progress.OnDone(result.Turns)
 
 	if len(result.Results) == 0 {
 		return ExitNoResult
