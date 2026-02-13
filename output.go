@@ -224,7 +224,7 @@ func summarizeToolResult(name string, result string) string {
 }
 
 // FormatResults formats agent results for output based on format, TTY, and color settings.
-func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnabled bool) string {
+func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
 	if len(result.Results) == 0 {
 		if format == "json" {
 			return formatJSON(result, stdoutTTY)
@@ -238,7 +238,7 @@ func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnab
 	case "paths":
 		return formatPaths(result)
 	default:
-		return formatHuman(result, stdoutTTY, colorEnabled)
+		return formatHuman(result, stdoutTTY, colorEnabled, showReasons)
 	}
 }
 
@@ -265,7 +265,7 @@ func formatPaths(result *AgentResult) string {
 	return b.String()
 }
 
-func formatHuman(result *AgentResult, stdoutTTY bool, colorEnabled bool) string {
+func formatHuman(result *AgentResult, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
 	var b strings.Builder
 
 	if !stdoutTTY {
@@ -294,9 +294,16 @@ func formatHuman(result *AgentResult, stdoutTTY bool, colorEnabled bool) string 
 
 	useColor := colorEnabled && stdoutTTY
 	for _, e := range entries {
-		if useColor {
-			// bold+cyan path, yellow lines, dim reason
-			// Split loc into path and line range
+		if !showReasons {
+			if useColor {
+				colonIdx := strings.LastIndex(e.loc, ":")
+				path := e.loc[:colonIdx]
+				lines := e.loc[colonIdx:]
+				fmt.Fprintf(&b, "\033[1;36m%s\033[33m%s\033[0m\n", path, lines)
+			} else {
+				fmt.Fprintf(&b, "%s\n", e.loc)
+			}
+		} else if useColor {
 			colonIdx := strings.LastIndex(e.loc, ":")
 			path := e.loc[:colonIdx]
 			lines := e.loc[colonIdx:]

@@ -53,8 +53,11 @@ func safePath(projectDir, requestedPath string) (string, error) {
 
 // ToolContext carries shared state for tool executors.
 type ToolContext struct {
-	ProjectDir string
-	GitIgnore  *GitIgnore
+	ProjectDir        string
+	GitIgnore         *GitIgnore
+	MaxResultsPerGrep int
+	MaxFileReadLines  int
+	AllowList         []string // when non-nil, restricts tools to these files only
 }
 
 // ExecuteTool dispatches a tool call to the appropriate executor.
@@ -63,7 +66,7 @@ type ToolContext struct {
 func ExecuteTool(ctx context.Context, name string, args json.RawMessage, tc ToolContext) (string, error) {
 	switch name {
 	case "grep":
-		return execGrep(ctx, args, tc.ProjectDir)
+		return execGrep(ctx, args, tc)
 	case "find_files":
 		return execFindFiles(args, tc)
 	case "read_file":
@@ -79,7 +82,8 @@ func ExecuteTool(ctx context.Context, name string, args json.RawMessage, tc Tool
 
 // --- execGrep ---
 
-func execGrep(ctx context.Context, args json.RawMessage, projectDir string) (string, error) {
+func execGrep(ctx context.Context, args json.RawMessage, tc ToolContext) (string, error) {
+	projectDir := tc.ProjectDir
 	var params struct {
 		Pattern    string `json:"pattern"`
 		Glob       string `json:"glob"`
@@ -91,8 +95,12 @@ func execGrep(ctx context.Context, args json.RawMessage, projectDir string) (str
 	if params.Pattern == "" {
 		return "Error: 'pattern' is required", nil
 	}
+	limit := tc.MaxResultsPerGrep
+	if limit <= 0 {
+		limit = 30
+	}
 	if params.MaxResults <= 0 {
-		params.MaxResults = 30
+		params.MaxResults = limit
 	}
 	if params.MaxResults > 100 {
 		params.MaxResults = 100
@@ -105,7 +113,14 @@ func execGrep(ctx context.Context, args json.RawMessage, projectDir string) (str
 	if params.Glob != "" {
 		cmdArgs = append(cmdArgs, "--glob", params.Glob)
 	}
-	cmdArgs = append(cmdArgs, "--", params.Pattern, projectDir)
+
+	// Build search targets: allowList files or the whole project dir
+	cmdArgs = append(cmdArgs, "--", params.Pattern)
+	if len(tc.AllowList) > 0 {
+		cmdArgs = append(cmdArgs, tc.AllowList...)
+	} else {
+		cmdArgs = append(cmdArgs, projectDir)
+	}
 
 	cmd := exec.CommandContext(ctx, "rg", cmdArgs...)
 	out, err := cmd.Output()
@@ -192,6 +207,15 @@ func execFindFiles(args json.RawMessage, tc ToolContext) (string, error) {
 	const maxResults = 100
 	var matches []string
 
+	// Build allowList lookup set for fast membership checks
+	var allowSet map[string]bool
+	if len(tc.AllowList) > 0 {
+		allowSet = make(map[string]bool, len(tc.AllowList))
+		for _, f := range tc.AllowList {
+			allowSet[f] = true
+		}
+	}
+
 	filepath.WalkDir(tc.ProjectDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -206,6 +230,11 @@ func execFindFiles(args json.RawMessage, tc ToolContext) (string, error) {
 			if d.IsDir() {
 				return filepath.SkipDir
 			}
+			return nil
+		}
+
+		// When allowList is set, only include listed files
+		if allowSet != nil && !d.IsDir() && !allowSet[path] {
 			return nil
 		}
 
@@ -271,6 +300,20 @@ func execReadFile(args json.RawMessage, tc ToolContext) (string, error) {
 		return fmt.Sprintf("Error: %s", err), nil
 	}
 
+	// When allowList is set, only permit listed files
+	if len(tc.AllowList) > 0 {
+		allowed := false
+		for _, f := range tc.AllowList {
+			if f == absPath {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return fmt.Sprintf("Error: '%s' is not in the provided file list (--stdin scope)", params.Path), nil
+		}
+	}
+
 	data, err := os.ReadFile(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -310,7 +353,10 @@ func execReadFile(args json.RawMessage, tc ToolContext) (string, error) {
 		}
 	}
 
-	const maxLines = 200
+	maxLines := tc.MaxFileReadLines
+	if maxLines <= 0 {
+		maxLines = 200
+	}
 	truncated := false
 	if !hasRange && totalLines > maxLines {
 		end = maxLines

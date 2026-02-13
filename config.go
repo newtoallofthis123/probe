@@ -5,26 +5,34 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/BurntSushi/toml"
 )
 
 type Config struct {
-	Model        string
-	BaseURL      string
-	APIKey       string
-	MaxTurns     int
-	ProjectDir   string
-	OutputFormat string // "human", "json", "paths"
-	Verbose      bool
-	Quiet        bool
+	Model            string
+	BaseURL          string
+	APIKey           string
+	MaxTurns         int
+	ProjectDir       string
+	OutputFormat     string // "human", "json", "paths"
+	Verbose          bool
+	Quiet            bool
+	MaxResultsPerGrep int
+	MaxFileReadLines  int
+	ShowReasons       bool
 }
 
 func defaultConfig() Config {
 	return Config{
-		Model:        "ministral-3:3b",
-		BaseURL:      "http://localhost:11434/v1",
-		MaxTurns:     10,
-		ProjectDir:   ".",
-		OutputFormat: "human",
+		Model:             "ministral-3:3b",
+		BaseURL:           "http://localhost:11434/v1",
+		MaxTurns:          10,
+		ProjectDir:        ".",
+		OutputFormat:      "human",
+		MaxResultsPerGrep: 30,
+		MaxFileReadLines:  200,
+		ShowReasons:       true,
 	}
 }
 
@@ -52,8 +60,6 @@ func (c *Config) loadEnv(flagSet map[string]bool) {
 		c.APIKey = v
 	}
 
-	// TODO: load config file (.probe.toml in project root, then $XDG_CONFIG_HOME/probe/config.toml)
-	// Precedence: flags > env > config file > defaults
 }
 
 // resolveProjectDir resolves ProjectDir to an absolute path and validates it.
@@ -70,5 +76,81 @@ func (c *Config) resolveProjectDir() error {
 		return fmt.Errorf("'%s' is not a directory", abs)
 	}
 	c.ProjectDir = abs
+	return nil
+}
+
+// configFile represents the TOML config file schema.
+type configFile struct {
+	Model            string `toml:"model"`
+	BaseURL          string `toml:"base_url"`
+	APIKeyEnv        string `toml:"api_key_env"`
+	MaxTurns         int    `toml:"max_turns"`
+	MaxResultsPerGrep int   `toml:"max_results_per_grep"`
+	MaxFileReadLines  int   `toml:"max_file_read_lines"`
+	ShowReasons       *bool `toml:"show_reasons"`
+	OutputFormat      string `toml:"output_format"`
+}
+
+// loadConfigFile searches for a config file in standard locations.
+// Order: .probe.toml in projectDir, then XDG_CONFIG_HOME/probe/config.toml,
+// then ~/.config/probe/config.toml. First found wins.
+func loadConfigFile(projectDir string) (*configFile, error) {
+	candidates := []string{
+		filepath.Join(projectDir, ".probe.toml"),
+	}
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		candidates = append(candidates, filepath.Join(xdg, "probe", "config.toml"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, filepath.Join(home, ".config", "probe", "config.toml"))
+	}
+
+	for _, path := range candidates {
+		if _, err := os.Stat(path); err == nil {
+			var cf configFile
+			if _, err := toml.DecodeFile(path, &cf); err != nil {
+				return nil, fmt.Errorf("parsing %s: %w", path, err)
+			}
+			return &cf, nil
+		}
+	}
+	return nil, nil // no config file found
+}
+
+// loadFile overlays config file values onto Config. Only non-zero values override.
+func (c *Config) loadFile(projectDir string) error {
+	cf, err := loadConfigFile(projectDir)
+	if err != nil {
+		return err
+	}
+	if cf == nil {
+		return nil
+	}
+	if cf.Model != "" {
+		c.Model = cf.Model
+	}
+	if cf.BaseURL != "" {
+		c.BaseURL = cf.BaseURL
+	}
+	if cf.APIKeyEnv != "" {
+		if v := os.Getenv(cf.APIKeyEnv); v != "" {
+			c.APIKey = v
+		}
+	}
+	if cf.MaxTurns > 0 {
+		c.MaxTurns = cf.MaxTurns
+	}
+	if cf.MaxResultsPerGrep > 0 {
+		c.MaxResultsPerGrep = cf.MaxResultsPerGrep
+	}
+	if cf.MaxFileReadLines > 0 {
+		c.MaxFileReadLines = cf.MaxFileReadLines
+	}
+	if cf.ShowReasons != nil {
+		c.ShowReasons = *cf.ShowReasons
+	}
+	if cf.OutputFormat != "" {
+		c.OutputFormat = cf.OutputFormat
+	}
 	return nil
 }

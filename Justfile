@@ -52,5 +52,13 @@ fmt:
 vet:
     go vet ./...
 
+# Run validation tests (requires Ollama)
+validate: build
+    bash test/validate.sh
+
+# Run a single query with verbose output for debugging
+validate-one QUERY:
+    ./probe --verbose "{{QUERY}}"
+
 # Lint + vet + test (CI-style)
 ci: fmt vet test

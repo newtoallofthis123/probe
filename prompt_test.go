@@ -197,6 +197,50 @@ func TestProjectTree_LargeDirCollapse(t *testing.T) {
 	}
 }
 
+func TestBuildSystemPrompt_AllowList(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
+	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main"), 0o644)
+
+	gi := LoadGitIgnore(dir)
+	tc := ToolContext{
+		ProjectDir: dir,
+		GitIgnore:  gi,
+		AllowList:  []string{filepath.Join(dir, "main.go"), filepath.Join(dir, "config.go")},
+	}
+
+	prompt := BuildSystemPrompt(tc, "gpt-4")
+	if !strings.Contains(prompt, "Search scope") {
+		t.Error("prompt should contain 'Search scope' when AllowList is set")
+	}
+	if !strings.Contains(prompt, "main.go") {
+		t.Error("prompt should list main.go")
+	}
+	if !strings.Contains(prompt, "config.go") {
+		t.Error("prompt should list config.go")
+	}
+	if !strings.Contains(prompt, "Only search within these files") {
+		t.Error("prompt should instruct LLM to stay within scope")
+	}
+}
+
+func TestBuildSystemPrompt_AllowListTruncation(t *testing.T) {
+	dir := t.TempDir()
+	var allowList []string
+	for i := 0; i < 60; i++ {
+		name := filepath.Join(dir, strings.Repeat("f", 3)+string(rune('A'+i/26))+string(rune('a'+i%26))+".go")
+		os.WriteFile(name, []byte("package main"), 0o644)
+		allowList = append(allowList, name)
+	}
+
+	gi := LoadGitIgnore(dir)
+	tc := ToolContext{ProjectDir: dir, GitIgnore: gi, AllowList: allowList}
+	prompt := BuildSystemPrompt(tc, "gpt-4")
+	if !strings.Contains(prompt, "and 10 more files") {
+		t.Errorf("expected truncation at 50 files, got prompt without truncation message")
+	}
+}
+
 func TestFileStats(t *testing.T) {
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, "src"), 0o755)

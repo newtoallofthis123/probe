@@ -110,7 +110,7 @@ func TestFormatResultsHumanTTY(t *testing.T) {
 		Summary: "found stuff",
 		Turns:   2,
 	}
-	out := FormatResults(result, "human", true, false)
+	out := FormatResults(result, "human", true, false, true)
 	if !strings.Contains(out, "main.go:1-10") {
 		t.Errorf("expected main.go:1-10, got %q", out)
 	}
@@ -125,7 +125,7 @@ func TestFormatResultsHumanPipe(t *testing.T) {
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "entry point"},
 		},
 	}
-	out := FormatResults(result, "human", false, false)
+	out := FormatResults(result, "human", false, false, true)
 	if out != "main.go:1-10\n" {
 		t.Errorf("pipe output should be path:lines only, got %q", out)
 	}
@@ -143,7 +143,7 @@ func TestFormatResultsJSON(t *testing.T) {
 		Turns:   1,
 	}
 	// Pretty (TTY)
-	out := FormatResults(result, "json", true, false)
+	out := FormatResults(result, "json", true, false, true)
 	var parsed AgentResult
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("TTY JSON not valid: %v", err)
@@ -153,7 +153,7 @@ func TestFormatResultsJSON(t *testing.T) {
 	}
 
 	// Compact (pipe)
-	out = FormatResults(result, "json", false, false)
+	out = FormatResults(result, "json", false, false, true)
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("pipe JSON not valid: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestFormatResultsJSONEmpty(t *testing.T) {
 		Summary: "No relevant code found",
 		Turns:   3,
 	}
-	out := FormatResults(result, "json", false, false)
+	out := FormatResults(result, "json", false, false, true)
 	var parsed AgentResult
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("empty JSON not valid: %v", err)
@@ -186,7 +186,7 @@ func TestFormatResultsPaths(t *testing.T) {
 			{File: "agent.go", StartLine: 5, EndLine: 15, Reason: "c"},
 		},
 	}
-	out := FormatResults(result, "paths", false, false)
+	out := FormatResults(result, "paths", false, false, true)
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) != 2 {
 		t.Errorf("expected 2 deduplicated paths, got %d: %v", len(lines), lines)
@@ -202,7 +202,7 @@ func TestFormatResultsHumanColor(t *testing.T) {
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "test"},
 		},
 	}
-	out := FormatResults(result, "human", true, true)
+	out := FormatResults(result, "human", true, true, true)
 	if !strings.Contains(out, "\033[1;36m") {
 		t.Error("expected ANSI color codes in colored output")
 	}
@@ -210,7 +210,7 @@ func TestFormatResultsHumanColor(t *testing.T) {
 
 func TestFormatResultsEmpty(t *testing.T) {
 	result := &AgentResult{Results: nil}
-	out := FormatResults(result, "human", true, true)
+	out := FormatResults(result, "human", true, true, true)
 	if out != "" {
 		t.Errorf("expected empty string for no results in human format, got %q", out)
 	}

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 
 	"golang.org/x/term"
@@ -70,6 +73,8 @@ func run() int {
 	flag.BoolVar(&cfg.Verbose, "v", false, "Show agent trace on stderr")
 	flag.BoolVar(&cfg.Quiet, "quiet", false, "Suppress all output except exit code")
 	flag.BoolVar(&cfg.Quiet, "q", false, "Suppress all output except exit code")
+	var stdinFlag bool
+	flag.BoolVar(&stdinFlag, "stdin", false, "Read file list from stdin (one path per line)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
 
 	flag.Usage = func() {
@@ -99,6 +104,16 @@ func run() int {
 		cfg.Verbose = false
 	}
 
+	// Load config file (between defaults and env)
+	// Need to resolve dir first for .probe.toml lookup
+	projDir := cfg.ProjectDir
+	if abs, err := filepath.Abs(projDir); err == nil {
+		projDir = abs
+	}
+	if err := cfg.loadFile(projDir); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", err)
+	}
+
 	// Load env vars for unset flags
 	cfg.loadEnv(flagSet)
 
@@ -114,6 +129,34 @@ func run() int {
 		return ExitError
 	}
 
+	// Read file list from stdin if --stdin
+	var allowList []string
+	if stdinFlag {
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			fmt.Fprintf(os.Stderr, "error: --stdin requires piped input, not a terminal\n")
+			return ExitError
+		}
+		scanner := bufio.NewScanner(os.Stdin)
+		for scanner.Scan() {
+			line := strings.TrimSpace(scanner.Text())
+			if line == "" {
+				continue
+			}
+			resolved, err := safePath(cfg.ProjectDir, line)
+			if err != nil {
+				continue // skip paths outside project
+			}
+			if _, err := os.Stat(resolved); err != nil {
+				continue // skip non-existent files
+			}
+			allowList = append(allowList, resolved)
+		}
+		if len(allowList) == 0 {
+			fmt.Fprintf(os.Stderr, "error: no valid files in stdin input\n")
+			return ExitNoResult
+		}
+	}
+
 	// Require query
 	if flag.NArg() < 1 {
 		flag.Usage()
@@ -123,8 +166,11 @@ func run() int {
 
 	// Build tool context
 	toolCtx := ToolContext{
-		ProjectDir: cfg.ProjectDir,
-		GitIgnore:  LoadGitIgnore(cfg.ProjectDir),
+		ProjectDir:        cfg.ProjectDir,
+		GitIgnore:         LoadGitIgnore(cfg.ProjectDir),
+		MaxResultsPerGrep: cfg.MaxResultsPerGrep,
+		MaxFileReadLines:  cfg.MaxFileReadLines,
+		AllowList:         allowList,
 	}
 
 	progress := NewProgress(&cfg)
@@ -138,7 +184,7 @@ func run() int {
 
 	if len(result.Results) == 0 {
 		if cfg.OutputFormat == "json" {
-			fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor))
+			fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
 		}
 		if !cfg.Quiet {
 			if result.Summary != "" {
@@ -150,7 +196,7 @@ func run() int {
 		return ExitNoResult
 	}
 
-	fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor))
+	fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
 	progress.PrintSummary(len(result.Results))
 	return ExitFound
 }

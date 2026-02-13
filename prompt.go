@@ -79,6 +79,20 @@ Typical workflow:
 		buf.WriteString(recentFiles)
 		buf.WriteString("\n")
 	}
+	if len(tc.AllowList) > 0 {
+		buf.WriteString("\n## Search scope\n\nYou are searching a specific set of files (provided via stdin), not the entire project.\n\nFiles in scope:\n")
+		limit := 50
+		for i, f := range tc.AllowList {
+			if i >= limit {
+				buf.WriteString(fmt.Sprintf("... and %d more files\n", len(tc.AllowList)-limit))
+				break
+			}
+			rel, _ := filepath.Rel(tc.ProjectDir, f)
+			buf.WriteString("- " + rel + "\n")
+		}
+		buf.WriteString("\nOnly search within these files. Do not look outside this set.\n")
+	}
+
 	buf.WriteString(`
 ## Output
 

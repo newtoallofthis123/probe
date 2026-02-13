@@ -150,6 +150,75 @@ func TestSubmitAnswer(t *testing.T) {
 	}
 }
 
+// --- AllowList (--stdin) tests ---
+
+func TestGrepRespectsAllowList(t *testing.T) {
+	if _, err := exec.LookPath("rg"); err != nil {
+		t.Skip("rg not on PATH")
+	}
+	tc := toolContext(t)
+	// AllowList with two files — grep should only search those
+	tc.AllowList = []string{
+		filepath.Join(tc.ProjectDir, "main.go"),
+		filepath.Join(tc.ProjectDir, "config.go"),
+	}
+
+	args := mustJSON(t, map[string]any{"pattern": "package main"})
+	result, err := ExecuteTool(context.Background(), "grep", args, tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "main.go") {
+		t.Errorf("expected main.go in results, got:\n%s", result)
+	}
+	// Should NOT contain files outside allowList
+	if strings.Contains(result, "tools_exec.go") {
+		t.Errorf("grep should be scoped to allowList, but found tools_exec.go")
+	}
+}
+
+func TestFindFilesRespectsAllowList(t *testing.T) {
+	tc := toolContext(t)
+	tc.AllowList = []string{filepath.Join(tc.ProjectDir, "main.go")}
+
+	args := mustJSON(t, map[string]any{"pattern": "*.go"})
+	result, err := ExecuteTool(context.Background(), "find_files", args, tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "main.go") {
+		t.Errorf("expected main.go, got:\n%s", result)
+	}
+	if strings.Contains(result, "config.go") {
+		t.Errorf("find_files should be scoped to allowList, but found config.go")
+	}
+}
+
+func TestReadFileRespectsAllowList(t *testing.T) {
+	tc := toolContext(t)
+	tc.AllowList = []string{filepath.Join(tc.ProjectDir, "main.go")}
+
+	// Reading main.go should work
+	args := mustJSON(t, map[string]any{"path": "main.go", "start_line": 1, "end_line": 3})
+	result, err := ExecuteTool(context.Background(), "read_file", args, tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, "package main") {
+		t.Errorf("expected file content, got:\n%s", result)
+	}
+
+	// Reading config.go should be rejected
+	args2 := mustJSON(t, map[string]any{"path": "config.go"})
+	result2, err := ExecuteTool(context.Background(), "read_file", args2, tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result2, "not in the provided file list") {
+		t.Errorf("expected allowList rejection, got:\n%s", result2)
+	}
+}
+
 func mustJSON(t *testing.T, v any) json.RawMessage {
 	t.Helper()
 	b, err := json.Marshal(v)
