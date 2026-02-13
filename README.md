@@ -1,5 +1,7 @@
 # probe
 
+[![CI](https://github.com/newtoallofthis123/probe/actions/workflows/ci.yml/badge.svg)](https://github.com/newtoallofthis123/probe/actions/workflows/ci.yml)
+
 Agentic code search from the command line. Ask a question in plain English, get back file paths and line numbers.
 
 ```

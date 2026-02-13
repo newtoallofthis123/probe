@@ -1,0 +1,31 @@
+name: Bug Report
+description: Report a bug in probe
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect vs what actually happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal command or steps to trigger the bug.
+      placeholder: |
+        probe "some query"
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Go version, model/provider you're using.
+      placeholder: |
+        OS: macOS 15.1
+        Go: 1.24
+        Model: ministral-3:3b (Ollama)
+    validations:
+      required: false
