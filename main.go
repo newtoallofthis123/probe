@@ -68,7 +68,7 @@ func run() int {
 	flag.IntVar(&cfg.MaxTurns, "max-turns", cfg.MaxTurns, "Maximum agent turns")
 	flag.StringVar(&cfg.ProjectDir, "dir", cfg.ProjectDir, "Project directory to search")
 	flag.BoolVar(&jsonFlag, "json", false, "Output results as JSON")
-	flag.StringVar(&cfg.OutputFormat, "format", cfg.OutputFormat, "Output format: human, json, paths")
+	flag.StringVar(&cfg.OutputFormat, "format", cfg.OutputFormat, "Output format: human, json, paths, qf")
 	flag.BoolVar(&cfg.Verbose, "verbose", false, "Show agent trace on stderr")
 	flag.BoolVar(&cfg.Verbose, "v", false, "Show agent trace on stderr")
 	flag.BoolVar(&cfg.Quiet, "quiet", false, "Suppress all output except exit code")

@@ -237,6 +237,8 @@ func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnab
 		return formatJSON(result, stdoutTTY)
 	case "paths":
 		return formatPaths(result)
+	case "qf":
+		return formatQuickfix(result)
 	default:
 		return formatHuman(result, stdoutTTY, colorEnabled, showReasons)
 	}
@@ -261,6 +263,14 @@ func formatPaths(result *AgentResult) string {
 			b.WriteString(r.File)
 			b.WriteByte('\n')
 		}
+	}
+	return b.String()
+}
+
+func formatQuickfix(result *AgentResult) string {
+	var b strings.Builder
+	for _, r := range result.Results {
+		fmt.Fprintf(&b, "%s:%d:1: %s\n", r.File, r.StartLine, r.Reason)
 	}
 	return b.String()
 }
