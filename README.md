@@ -6,7 +6,7 @@
 
 Ask a question in plain English. Get back file paths and line numbers.
 
-<video src="https://github.com/newtoallofthis123/probe/raw/main/assets/demo.mp4" autoplay loop muted playsinline width="100%"></video>
+![probe demo](assets/demo.gif)
 
 ## Why probe?
 
