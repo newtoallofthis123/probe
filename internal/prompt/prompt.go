@@ -1,4 +1,4 @@
-package main
+package prompt
 
 import (
 	"encoding/json"
@@ -8,10 +8,13 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/newtoallofthis/probe/internal/sandbox"
+	"github.com/newtoallofthis/probe/internal/tools"
 )
 
 // BuildSystemPrompt generates the full system prompt with project context injected.
-func BuildSystemPrompt(tc ToolContext, model string, think bool) string {
+func BuildSystemPrompt(tc tools.ToolContext, model string, think bool) string {
 	if isSmallModel(model) {
 		return buildSmallPrompt(tc)
 	}
@@ -26,7 +29,7 @@ func isSmallModel(model string) bool {
 	return strings.Contains(m, "ministral") || strings.Contains(m, "3b") || strings.Contains(m, "1b")
 }
 
-func buildSmallPrompt(tc ToolContext) string {
+func buildSmallPrompt(tc tools.ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	return fmt.Sprintf(`Search the codebase for files matching the user's query.
 Grep to find files, read_file for line numbers, then submit_answer.
@@ -37,7 +40,7 @@ NEVER guess line numbers — read the file to confirm.
 %s`, tree)
 }
 
-func buildFastPrompt(tc ToolContext) string {
+func buildFastPrompt(tc tools.ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	langHint := detectLanguage(tc.ProjectDir)
 	fileStats := fileStats(tc.ProjectDir, tc.GitIgnore)
@@ -97,7 +100,7 @@ Do not explain your search process. Just find the code and submit_answer.`)
 	return buf.String()
 }
 
-func buildThinkPrompt(tc ToolContext) string {
+func buildThinkPrompt(tc tools.ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	langHint := detectLanguage(tc.ProjectDir)
 	fileStats := fileStats(tc.ProjectDir, tc.GitIgnore)
@@ -174,7 +177,7 @@ Do not explain your search process. Just find the code and submit_answer.`)
 }
 
 // projectTree generates a directory tree string for the project.
-func projectTree(projectDir string, gi *GitIgnore) string {
+func projectTree(projectDir string, gi *sandbox.GitIgnore) string {
 	// Count total files to decide depth
 	totalFiles := 0
 	filepath.WalkDir(projectDir, func(path string, d fs.DirEntry, err error) error {
@@ -226,7 +229,7 @@ func projectTree(projectDir string, gi *GitIgnore) string {
 }
 
 // buildPromptTree returns formatted lines for the tree.
-func buildPromptTree(dir, projectDir string, gi *GitIgnore, depth, maxDepth int) []string {
+func buildPromptTree(dir, projectDir string, gi *sandbox.GitIgnore, depth, maxDepth int) []string {
 	if depth >= maxDepth {
 		return nil
 	}
@@ -266,7 +269,7 @@ func buildPromptTree(dir, projectDir string, gi *GitIgnore, depth, maxDepth int)
 }
 
 // countVisible counts non-ignored files (not dirs) in a directory.
-func countVisible(dir, projectDir string, gi *GitIgnore) int {
+func countVisible(dir, projectDir string, gi *sandbox.GitIgnore) int {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return 0
@@ -397,7 +400,7 @@ func parsePackageJSON(data []byte, projectDir string) string {
 }
 
 // fileStats returns a string with file and directory counts.
-func fileStats(projectDir string, gi *GitIgnore) string {
+func fileStats(projectDir string, gi *sandbox.GitIgnore) string {
 	files, dirs := 0, 0
 	filepath.WalkDir(projectDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

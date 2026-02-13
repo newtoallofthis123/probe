@@ -1,4 +1,4 @@
-package main
+package output
 
 import (
 	"encoding/json"
@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/newtoallofthis/probe/internal/agent"
 	"golang.org/x/term"
 )
 
@@ -22,12 +23,12 @@ type Progress struct {
 	spinner *Spinner
 }
 
-// NewProgress creates a progress reporter based on config flags.
-func NewProgress(cfg *Config) *Progress {
+// NewProgress creates a progress reporter based on verbose/quiet flags.
+func NewProgress(verbose, quiet bool) *Progress {
 	stderrTTY := term.IsTerminal(int(os.Stderr.Fd()))
 	return &Progress{
-		verbose: cfg.Verbose,
-		quiet:   cfg.Quiet,
+		verbose: verbose,
+		quiet:   quiet,
 		isTTY:   stderrTTY,
 		start:   time.Now(),
 	}
@@ -224,7 +225,7 @@ func summarizeToolResult(name string, result string) string {
 }
 
 // FormatResults formats agent results for output based on format, TTY, and color settings.
-func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
+func FormatResults(result *agent.AgentResult, format string, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
 	if len(result.Results) == 0 {
 		if format == "json" {
 			return formatJSON(result, stdoutTTY)
@@ -244,7 +245,7 @@ func FormatResults(result *AgentResult, format string, stdoutTTY bool, colorEnab
 	}
 }
 
-func formatJSON(result *AgentResult, pretty bool) string {
+func formatJSON(result *agent.AgentResult, pretty bool) string {
 	var data []byte
 	if pretty {
 		data, _ = json.MarshalIndent(result, "", "  ")
@@ -254,7 +255,7 @@ func formatJSON(result *AgentResult, pretty bool) string {
 	return string(data) + "\n"
 }
 
-func formatPaths(result *AgentResult) string {
+func formatPaths(result *agent.AgentResult) string {
 	seen := make(map[string]bool)
 	var b strings.Builder
 	for _, r := range result.Results {
@@ -267,7 +268,7 @@ func formatPaths(result *AgentResult) string {
 	return b.String()
 }
 
-func formatQuickfix(result *AgentResult) string {
+func formatQuickfix(result *agent.AgentResult) string {
 	var b strings.Builder
 	for _, r := range result.Results {
 		fmt.Fprintf(&b, "%s:%d:1: %s\n", r.File, r.StartLine, r.Reason)
@@ -275,7 +276,7 @@ func formatQuickfix(result *AgentResult) string {
 	return b.String()
 }
 
-func formatHuman(result *AgentResult, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
+func formatHuman(result *agent.AgentResult, stdoutTTY bool, colorEnabled bool, showReasons bool) string {
 	var b strings.Builder
 
 	if !stdoutTTY {

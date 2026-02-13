@@ -24,7 +24,7 @@ Or build from source:
 ```bash
 git clone https://github.com/newtoallofthis/probe.git
 cd probe
-go build -o probe .
+go build -o probe ./cmd/probe/
 ```
 
 ## Quick start
@@ -227,18 +227,17 @@ just run-on DIR "q" # run against a specific directory
 
 ### Architecture
 
-Everything is `package main`. Eight files, each with a single responsibility:
+Standard Go project layout with `cmd/` entrypoint and `internal/` packages:
 
-| File | Responsibility |
+| Package | Responsibility |
 |---|---|
-| `main.go` | CLI entrypoint, flag parsing, signal handling |
-| `agent.go` | The agent while-loop (~50 lines of real logic) |
-| `tools.go` | Tool schema definitions (pure data) |
-| `tools_exec.go` | Tool execution (pure functions: args in, string out) |
-| `prompt.go` | System prompt construction with project context |
-| `output.go` | Progress display and result formatting |
-| `config.go` | Config loading (flags > env > defaults) |
-| `gitignore.go` | Gitignore parsing and path filtering |
+| `cmd/probe/` | CLI entrypoint, flag parsing, signal handling |
+| `internal/agent/` | Agent while-loop, result types |
+| `internal/tools/` | Tool schemas and execution (pure functions: args in, string out) |
+| `internal/prompt/` | System prompt construction with project context |
+| `internal/output/` | Progress display and result formatting |
+| `internal/config/` | Config loading (flags > env > file > defaults) |
+| `internal/sandbox/` | Path sandboxing, gitignore filtering |
 
 ## License
 

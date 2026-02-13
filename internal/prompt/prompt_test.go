@@ -1,10 +1,13 @@
-package main
+package prompt
 
 import (
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/newtoallofthis/probe/internal/sandbox"
+	"github.com/newtoallofthis/probe/internal/tools"
 )
 
 func TestBuildSystemPrompt_Fast(t *testing.T) {
@@ -14,8 +17,8 @@ func TestBuildSystemPrompt_Fast(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n\ngo 1.21\n"), 0o644)
 	os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test"), 0o644)
 
-	gi := LoadGitIgnore(dir)
-	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
+	gi := sandbox.LoadGitIgnore(dir)
+	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
 	prompt := BuildSystemPrompt(tc, "gpt-4", false)
 	if !strings.Contains(prompt, "code search agent") {
@@ -44,8 +47,8 @@ func TestBuildSystemPrompt_Think(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("package main"), 0o644)
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n\ngo 1.21\n"), 0o644)
 
-	gi := LoadGitIgnore(dir)
-	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
+	gi := sandbox.LoadGitIgnore(dir)
+	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
 	prompt := BuildSystemPrompt(tc, "gpt-4", true)
 	if !strings.Contains(prompt, "Start broad") {
@@ -60,8 +63,8 @@ func TestBuildSystemPrompt_Small(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
 
-	gi := LoadGitIgnore(dir)
-	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
+	gi := sandbox.LoadGitIgnore(dir)
+	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
 	prompt := BuildSystemPrompt(tc, "ministral-3:3b", false)
 	if !strings.Contains(prompt, "Submit early") {
@@ -174,7 +177,7 @@ func TestProjectTree(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "src", "models", "user.go"), []byte(""), 0o644)
 	os.WriteFile(filepath.Join(dir, ".git", "config"), []byte(""), 0o644)
 
-	gi := LoadGitIgnore(dir)
+	gi := sandbox.LoadGitIgnore(dir)
 	tree := projectTree(dir, gi)
 
 	if strings.Contains(tree, ".git") {
@@ -195,7 +198,7 @@ func TestProjectTree_Truncation(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, strings.Repeat("a", 5)+string(rune('A'+i/26))+string(rune('a'+i%26))+".txt"), []byte(""), 0o644)
 	}
 
-	gi := LoadGitIgnore(dir)
+	gi := sandbox.LoadGitIgnore(dir)
 	tree := projectTree(dir, gi)
 
 	if !strings.Contains(tree, "more entries") {
@@ -212,7 +215,7 @@ func TestProjectTree_LargeDirCollapse(t *testing.T) {
 		os.WriteFile(filepath.Join(bigDir, strings.Repeat("x", 3)+string(rune('a'+i))+".go"), []byte(""), 0o644)
 	}
 
-	gi := LoadGitIgnore(dir)
+	gi := sandbox.LoadGitIgnore(dir)
 	tree := projectTree(dir, gi)
 
 	if !strings.Contains(tree, "15 files") {
@@ -225,8 +228,8 @@ func TestBuildSystemPrompt_AllowList(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
 	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main"), 0o644)
 
-	gi := LoadGitIgnore(dir)
-	tc := ToolContext{
+	gi := sandbox.LoadGitIgnore(dir)
+	tc := tools.ToolContext{
 		ProjectDir: dir,
 		GitIgnore:  gi,
 		AllowList:  []string{filepath.Join(dir, "main.go"), filepath.Join(dir, "config.go")},
@@ -256,8 +259,8 @@ func TestBuildSystemPrompt_AllowListTruncation(t *testing.T) {
 		allowList = append(allowList, name)
 	}
 
-	gi := LoadGitIgnore(dir)
-	tc := ToolContext{ProjectDir: dir, GitIgnore: gi, AllowList: allowList}
+	gi := sandbox.LoadGitIgnore(dir)
+	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi, AllowList: allowList}
 	prompt := BuildSystemPrompt(tc, "gpt-4", false)
 	if !strings.Contains(prompt, "and 10 more files") {
 		t.Errorf("expected truncation at 50 files, got prompt without truncation message")
@@ -270,7 +273,7 @@ func TestFileStats(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "main.go"), []byte(""), 0o644)
 	os.WriteFile(filepath.Join(dir, "src", "app.go"), []byte(""), 0o644)
 
-	gi := LoadGitIgnore(dir)
+	gi := sandbox.LoadGitIgnore(dir)
 	stats := fileStats(dir, gi)
 
 	if !strings.Contains(stats, "2 files") {

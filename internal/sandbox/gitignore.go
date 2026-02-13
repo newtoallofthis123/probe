@@ -1,11 +1,39 @@
-package main
+package sandbox
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	ignore "github.com/sabhiram/go-gitignore"
 )
+
+// SafePath resolves a requested path relative to projectDir and ensures it
+// stays within the project boundary. Returns a Go error because callers
+// wrap it into a string message for the LLM.
+func SafePath(projectDir, requestedPath string) (string, error) {
+	// Resolve projectDir symlinks for consistent prefix checking
+	resolvedDir, err := filepath.EvalSymlinks(projectDir)
+	if err != nil {
+		resolvedDir = projectDir
+	}
+
+	joined := filepath.Join(resolvedDir, requestedPath)
+	abs, err := filepath.Abs(joined)
+	if err != nil {
+		return "", fmt.Errorf("resolving path: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		// File might not exist yet — fall back to abs
+		resolved = abs
+	}
+	if !strings.HasPrefix(resolved, resolvedDir) {
+		return "", fmt.Errorf("path '%s' is outside the project directory", requestedPath)
+	}
+	return resolved, nil
+}
 
 // GitIgnore wraps compiled gitignore rules for path filtering.
 type GitIgnore struct {

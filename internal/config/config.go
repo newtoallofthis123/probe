@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ type Config struct {
 	Think             bool
 }
 
-func defaultConfig() Config {
+func DefaultConfig() Config {
 	return Config{
 		Model:             "ministral-3:3b",
 		BaseURL:           "http://localhost:11434/v1",
@@ -37,9 +37,9 @@ func defaultConfig() Config {
 	}
 }
 
-// loadEnv overlays environment variables onto the config.
+// LoadEnv overlays environment variables onto the config.
 // Only sets values that weren't explicitly set by flags.
-func (c *Config) loadEnv(flagSet map[string]bool) {
+func (c *Config) LoadEnv(flagSet map[string]bool) {
 	if !flagSet["model"] {
 		if v := os.Getenv("PROBE_MODEL"); v != "" {
 			c.Model = v
@@ -67,8 +67,8 @@ func (c *Config) loadEnv(flagSet map[string]bool) {
 	}
 }
 
-// resolveProjectDir resolves ProjectDir to an absolute path and validates it.
-func (c *Config) resolveProjectDir() error {
+// ResolveProjectDir resolves ProjectDir to an absolute path and validates it.
+func (c *Config) ResolveProjectDir() error {
 	abs, err := filepath.Abs(c.ProjectDir)
 	if err != nil {
 		return fmt.Errorf("resolving directory: %w", err)
@@ -123,8 +123,8 @@ func loadConfigFile(projectDir string) (*configFile, error) {
 	return nil, nil // no config file found
 }
 
-// loadFile overlays config file values onto Config. Only non-zero values override.
-func (c *Config) loadFile(projectDir string) error {
+// LoadFile overlays config file values onto Config. Only non-zero values override.
+func (c *Config) LoadFile(projectDir string) error {
 	cf, err := loadConfigFile(projectDir)
 	if err != nil {
 		return err

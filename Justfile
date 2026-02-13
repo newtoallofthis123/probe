@@ -4,7 +4,7 @@ default:
 
 # Build the binary
 build:
-    go build -o probe .
+    go build -o probe ./cmd/probe/
 
 # Run all tests
 test:
@@ -20,15 +20,15 @@ test-one NAME:
 
 # Build and run with arguments
 run *ARGS:
-    go run . {{ARGS}}
+    go run ./cmd/probe/ {{ARGS}}
 
 # Run against a target directory
 run-on DIR *ARGS:
-    go run . --dir {{DIR}} {{ARGS}}
+    go run ./cmd/probe/ --dir {{DIR}} {{ARGS}}
 
 # Run with verbose output
 run-v *ARGS:
-    go run . --verbose {{ARGS}}
+    go run ./cmd/probe/ --verbose {{ARGS}}
 
 # Run integration tests (requires Ollama)
 test-integration:

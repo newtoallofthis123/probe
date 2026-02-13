@@ -8,18 +8,26 @@ Read `research/probe-spec.md` for the full technical specification. Read `though
 
 ## Architecture
 
-Everything is `package main`. Eight files, each with a single responsibility:
+Standard Go project layout with `cmd/` entrypoint and `internal/` packages:
 
-- `main.go` — CLI entrypoint, flag parsing, signal handling, orchestration
-- `agent.go` — The agent while-loop. ~50 lines of real logic.
-- `tools.go` — Tool schema definitions (pure data, no behavior)
-- `tools_exec.go` — Tool execution (each executor is a pure function: args in, string out)
-- `prompt.go` — System prompt construction with project context injection
-- `output.go` — Result formatting and progress display
-- `config.go` — Config loading with precedence: flags > env > file > defaults
-- `gitignore.go` — Gitignore parsing and path filtering
+- `cmd/probe/main.go` — CLI entrypoint, flag parsing, signal handling, orchestration
+- `internal/agent/agent.go` — The agent while-loop, SearchResult/AgentResult types, ProgressReporter interface
+- `internal/tools/tools.go` — Tool schema definitions (pure data, no behavior)
+- `internal/tools/tools_exec.go` — Tool execution (each executor is a pure function: args in, string out), ToolContext
+- `internal/prompt/prompt.go` — System prompt construction with project context injection
+- `internal/output/output.go` — Result formatting, progress display, spinner
+- `internal/config/config.go` — Config loading with precedence: flags > env > file > defaults
+- `internal/sandbox/gitignore.go` — Gitignore parsing, path filtering, SafePath sandboxing
 
-Do not create new files unless the ticket explicitly says to. Do not create `internal/`, `pkg/`, or subdirectories. Do not extract "util" packages. When a file grows uncomfortable, that's a future problem — not today's.
+Dependency flow (no cycles):
+```
+main → agent → tools, prompt, config
+                tools → sandbox
+       output → agent (types only)
+       prompt → tools, sandbox
+```
+
+Do not create `pkg/` or `utils` packages. Do not add new internal packages without a ticket.
 
 ## Task Runner
 
@@ -92,7 +100,7 @@ Every tool result is truncated and the LLM is told it was truncated. Grep: 30 ma
 
 ## What Not To Do
 
-- Don't add packages, directories, or abstractions the ticket doesn't ask for.
+- Don't add new internal packages or abstractions the ticket doesn't ask for.
 - Don't add comments explaining obvious code. Do add comments explaining *why* something non-obvious is done.
 - Don't add error handling for impossible cases. Trust internal code.
 - Don't add configurability the ticket doesn't specify.

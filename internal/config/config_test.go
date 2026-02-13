@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"os"
@@ -7,7 +7,7 @@ import (
 )
 
 func TestDefaultConfig(t *testing.T) {
-	cfg := defaultConfig()
+	cfg := DefaultConfig()
 	if cfg.MaxResultsPerGrep != 30 {
 		t.Errorf("expected MaxResultsPerGrep=30, got %d", cfg.MaxResultsPerGrep)
 	}
@@ -77,8 +77,8 @@ max_turns = 5
 `
 	os.WriteFile(filepath.Join(dir, ".probe.toml"), []byte(tomlContent), 0644)
 
-	cfg := defaultConfig()
-	if err := cfg.loadFile(dir); err != nil {
+	cfg := DefaultConfig()
+	if err := cfg.LoadFile(dir); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Model != "custom-model" {
@@ -101,15 +101,15 @@ func TestLoadFilePrecedence(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".probe.toml"), []byte(`model = "from-file"`), 0644)
 
-	cfg := defaultConfig()
-	cfg.loadFile(dir)
+	cfg := DefaultConfig()
+	cfg.LoadFile(dir)
 	if cfg.Model != "from-file" {
 		t.Fatalf("expected from-file, got %q", cfg.Model)
 	}
 
 	// Env override
 	t.Setenv("PROBE_MODEL", "from-env")
-	cfg.loadEnv(map[string]bool{})
+	cfg.LoadEnv(map[string]bool{})
 	if cfg.Model != "from-env" {
 		t.Errorf("env should override file, got %q", cfg.Model)
 	}
@@ -120,8 +120,8 @@ func TestAPIKeyEnv(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, ".probe.toml"), []byte(`api_key_env = "MY_CUSTOM_KEY"`), 0644)
 
 	t.Setenv("MY_CUSTOM_KEY", "secret-key-123")
-	cfg := defaultConfig()
-	cfg.loadFile(dir)
+	cfg := DefaultConfig()
+	cfg.LoadFile(dir)
 	if cfg.APIKey != "secret-key-123" {
 		t.Errorf("expected API key from custom env var, got %q", cfg.APIKey)
 	}

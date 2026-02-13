@@ -1,4 +1,4 @@
-package main
+package agent
 
 import (
 	"context"
@@ -8,9 +8,22 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/newtoallofthis/probe/internal/config"
+	"github.com/newtoallofthis/probe/internal/prompt"
+	"github.com/newtoallofthis/probe/internal/tools"
 	"github.com/openai/openai-go"
 	"github.com/openai/openai-go/option"
 )
+
+// ProgressReporter is the interface agent uses for progress reporting.
+// Implemented by output.Progress.
+type ProgressReporter interface {
+	StartSpinner(msg string)
+	StopSpinner()
+	OnToolCall(name string, args string)
+	OnToolResult(name string, result string)
+	OnTokenUsage(input, output, total int64)
+}
 
 // SearchResult represents a single code location found by the agent.
 type SearchResult struct {
@@ -30,7 +43,7 @@ type AgentResult struct {
 // RunAgent executes the agent loop: sends the query to the LLM, handles tool
 // calls iteratively, and returns results when submit_answer is called or the
 // turn limit is reached.
-func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContext, progress *Progress) (*AgentResult, error) {
+func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx tools.ToolContext, progress ProgressReporter) (*AgentResult, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" && isLocalhost(cfg.BaseURL) {
 		apiKey = "ollama"
@@ -41,8 +54,8 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		option.WithAPIKey(apiKey),
 	)
 
-	systemPrompt := BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think)
-	tools := ToolDefinitions()
+	systemPrompt := prompt.BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think)
+	toolDefs := tools.ToolDefinitions()
 
 	messages := []openai.ChatCompletionMessageParamUnion{
 		{
@@ -73,7 +86,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		params := openai.ChatCompletionNewParams{
 			Model:    openai.ChatModel(cfg.Model),
 			Messages: messages,
-			Tools:    tools,
+			Tools:    toolDefs,
 		}
 
 		// Force submit_answer if token budget nearly exhausted
@@ -170,11 +183,11 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 			wg.Add(1)
 			go func(idx int, tc openai.ChatCompletionMessageToolCall) {
 				defer wg.Done()
-				res, err := ExecuteTool(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments), toolCtx)
+				res, err := tools.ExecuteTool(ctx, tc.Function.Name, json.RawMessage(tc.Function.Arguments), toolCtx)
 				mu.Lock()
 				defer mu.Unlock()
 				if err != nil {
-					var sa *SubmitAnswerResult
+					var sa *tools.SubmitAnswerResult
 					if errors.As(err, &sa) {
 						return
 					}

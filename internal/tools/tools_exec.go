@@ -1,4 +1,4 @@
-package main
+package tools
 
 import (
 	"bufio"
@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
+	"github.com/newtoallofthis/probe/internal/sandbox"
 )
 
 // SubmitAnswerResult is a sentinel error returned when the LLM calls submit_answer.
@@ -25,36 +26,10 @@ func (e *SubmitAnswerResult) Error() string {
 	return "submit_answer"
 }
 
-// safePath resolves a requested path relative to projectDir and ensures it
-// stays within the project boundary. Returns a Go error because callers
-// wrap it into a string message for the LLM.
-func safePath(projectDir, requestedPath string) (string, error) {
-	// Resolve projectDir symlinks for consistent prefix checking
-	resolvedDir, err := filepath.EvalSymlinks(projectDir)
-	if err != nil {
-		resolvedDir = projectDir
-	}
-
-	joined := filepath.Join(resolvedDir, requestedPath)
-	abs, err := filepath.Abs(joined)
-	if err != nil {
-		return "", fmt.Errorf("resolving path: %w", err)
-	}
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		// File might not exist yet — fall back to abs
-		resolved = abs
-	}
-	if !strings.HasPrefix(resolved, resolvedDir) {
-		return "", fmt.Errorf("path '%s' is outside the project directory", requestedPath)
-	}
-	return resolved, nil
-}
-
 // ToolContext carries shared state for tool executors.
 type ToolContext struct {
 	ProjectDir        string
-	GitIgnore         *GitIgnore
+	GitIgnore         *sandbox.GitIgnore
 	MaxResultsPerGrep int
 	MaxFileReadLines  int
 	AllowList         []string // when non-nil, restricts tools to these files only
@@ -295,7 +270,7 @@ func execReadFile(args json.RawMessage, tc ToolContext) (string, error) {
 		return fmt.Sprintf("Error: '%s' is in .gitignore and excluded from search", params.Path), nil
 	}
 
-	absPath, err := safePath(tc.ProjectDir, params.Path)
+	absPath, err := sandbox.SafePath(tc.ProjectDir, params.Path)
 	if err != nil {
 		return fmt.Sprintf("Error: %s", err), nil
 	}
@@ -411,7 +386,7 @@ func execListDir(args json.RawMessage, tc ToolContext) (string, error) {
 		params.Depth = 2
 	}
 
-	absPath, err := safePath(tc.ProjectDir, params.Path)
+	absPath, err := sandbox.SafePath(tc.ProjectDir, params.Path)
 	if err != nil {
 		return fmt.Sprintf("Error: %s", err), nil
 	}
@@ -429,7 +404,7 @@ func execListDir(args json.RawMessage, tc ToolContext) (string, error) {
 	return buf.String(), nil
 }
 
-func buildTree(buf *strings.Builder, dir, projectDir string, gi *GitIgnore, indent string, currentDepth, maxDepth int) {
+func buildTree(buf *strings.Builder, dir, projectDir string, gi *sandbox.GitIgnore, indent string, currentDepth, maxDepth int) {
 	if currentDepth >= maxDepth {
 		return
 	}

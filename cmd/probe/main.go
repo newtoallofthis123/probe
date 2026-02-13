@@ -12,6 +12,11 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/newtoallofthis/probe/internal/agent"
+	"github.com/newtoallofthis/probe/internal/config"
+	"github.com/newtoallofthis/probe/internal/output"
+	"github.com/newtoallofthis/probe/internal/sandbox"
+	"github.com/newtoallofthis/probe/internal/tools"
 	"golang.org/x/term"
 )
 
@@ -59,7 +64,7 @@ func run() int {
 		}
 	}()
 	// Flag parsing
-	cfg := defaultConfig()
+	cfg := config.DefaultConfig()
 	var showVersion bool
 	var jsonFlag bool
 
@@ -112,12 +117,12 @@ func run() int {
 	if abs, err := filepath.Abs(projDir); err == nil {
 		projDir = abs
 	}
-	if err := cfg.loadFile(projDir); err != nil {
+	if err := cfg.LoadFile(projDir); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", err)
 	}
 
 	// Load env vars for unset flags
-	cfg.loadEnv(flagSet)
+	cfg.LoadEnv(flagSet)
 
 	// Check prerequisites
 	if err := canExecute(); err != nil {
@@ -126,7 +131,7 @@ func run() int {
 	}
 
 	// Resolve project dir
-	if err := cfg.resolveProjectDir(); err != nil {
+	if err := cfg.ResolveProjectDir(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return ExitError
 	}
@@ -144,7 +149,7 @@ func run() int {
 			if line == "" {
 				continue
 			}
-			resolved, err := safePath(cfg.ProjectDir, line)
+			resolved, err := sandbox.SafePath(cfg.ProjectDir, line)
 			if err != nil {
 				continue // skip paths outside project
 			}
@@ -167,16 +172,16 @@ func run() int {
 	query := flag.Arg(0)
 
 	// Build tool context
-	toolCtx := ToolContext{
+	toolCtx := tools.ToolContext{
 		ProjectDir:        cfg.ProjectDir,
-		GitIgnore:         LoadGitIgnore(cfg.ProjectDir),
+		GitIgnore:         sandbox.LoadGitIgnore(cfg.ProjectDir),
 		MaxResultsPerGrep: cfg.MaxResultsPerGrep,
 		MaxFileReadLines:  cfg.MaxFileReadLines,
 		AllowList:         allowList,
 	}
 
-	progress := NewProgress(&cfg)
-	result, err := RunAgent(ctx, query, &cfg, toolCtx, progress)
+	progress := output.NewProgress(cfg.Verbose, cfg.Quiet)
+	result, err := agent.RunAgent(ctx, query, &cfg, toolCtx, progress)
 	if err != nil {
 		progress.StopSpinner()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -186,7 +191,7 @@ func run() int {
 
 	if len(result.Results) == 0 {
 		if cfg.OutputFormat == "json" {
-			fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
+			fmt.Print(output.FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
 		}
 		if !cfg.Quiet {
 			if result.Summary != "" {
@@ -198,7 +203,7 @@ func run() int {
 		return ExitNoResult
 	}
 
-	fmt.Print(FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
+	fmt.Print(output.FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
 	progress.PrintSummary(len(result.Results))
 	return ExitFound
 }

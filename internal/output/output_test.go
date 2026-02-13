@@ -1,9 +1,11 @@
-package main
+package output
 
 import (
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/newtoallofthis/probe/internal/agent"
 )
 
 func TestSummarizeToolCall(t *testing.T) {
@@ -102,8 +104,8 @@ func TestProgressShouldShow(t *testing.T) {
 }
 
 func TestFormatResultsHumanTTY(t *testing.T) {
-	result := &AgentResult{
-		Results: []SearchResult{
+	result := &agent.AgentResult{
+		Results: []agent.SearchResult{
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "entry point"},
 			{File: "agent.go", StartLine: 5, EndLine: 20, Reason: "agent loop"},
 		},
@@ -120,8 +122,8 @@ func TestFormatResultsHumanTTY(t *testing.T) {
 }
 
 func TestFormatResultsHumanPipe(t *testing.T) {
-	result := &AgentResult{
-		Results: []SearchResult{
+	result := &agent.AgentResult{
+		Results: []agent.SearchResult{
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "entry point"},
 		},
 	}
@@ -135,8 +137,8 @@ func TestFormatResultsHumanPipe(t *testing.T) {
 }
 
 func TestFormatResultsJSON(t *testing.T) {
-	result := &AgentResult{
-		Results: []SearchResult{
+	result := &agent.AgentResult{
+		Results: []agent.SearchResult{
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "test"},
 		},
 		Summary: "found",
@@ -144,7 +146,7 @@ func TestFormatResultsJSON(t *testing.T) {
 	}
 	// Pretty (TTY)
 	out := FormatResults(result, "json", true, false, true)
-	var parsed AgentResult
+	var parsed agent.AgentResult
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("TTY JSON not valid: %v", err)
 	}
@@ -163,13 +165,13 @@ func TestFormatResultsJSON(t *testing.T) {
 }
 
 func TestFormatResultsJSONEmpty(t *testing.T) {
-	result := &AgentResult{
+	result := &agent.AgentResult{
 		Results: nil,
 		Summary: "No relevant code found",
 		Turns:   3,
 	}
 	out := FormatResults(result, "json", false, false, true)
-	var parsed AgentResult
+	var parsed agent.AgentResult
 	if err := json.Unmarshal([]byte(out), &parsed); err != nil {
 		t.Fatalf("empty JSON not valid: %v", err)
 	}
@@ -179,8 +181,8 @@ func TestFormatResultsJSONEmpty(t *testing.T) {
 }
 
 func TestFormatResultsPaths(t *testing.T) {
-	result := &AgentResult{
-		Results: []SearchResult{
+	result := &agent.AgentResult{
+		Results: []agent.SearchResult{
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "a"},
 			{File: "main.go", StartLine: 20, EndLine: 30, Reason: "b"},
 			{File: "agent.go", StartLine: 5, EndLine: 15, Reason: "c"},
@@ -197,8 +199,8 @@ func TestFormatResultsPaths(t *testing.T) {
 }
 
 func TestFormatResultsHumanColor(t *testing.T) {
-	result := &AgentResult{
-		Results: []SearchResult{
+	result := &agent.AgentResult{
+		Results: []agent.SearchResult{
 			{File: "main.go", StartLine: 1, EndLine: 10, Reason: "test"},
 		},
 	}
@@ -209,7 +211,7 @@ func TestFormatResultsHumanColor(t *testing.T) {
 }
 
 func TestFormatResultsEmpty(t *testing.T) {
-	result := &AgentResult{Results: nil}
+	result := &agent.AgentResult{Results: nil}
 	out := FormatResults(result, "human", true, true, true)
 	if out != "" {
 		t.Errorf("expected empty string for no results in human format, got %q", out)
