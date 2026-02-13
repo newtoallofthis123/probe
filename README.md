@@ -80,7 +80,8 @@ probe [flags] <query>
 | `--max-turns <n>` | Maximum agent turns | `10` |
 | `--dir <path>` | Project directory to search | `.` |
 | `--json` | Output results as JSON | |
-| `--format <fmt>` | Output format: `human`, `json`, `paths` | `human` |
+| `--format <fmt>` | Output format: `human`, `json`, `paths`, `qf` | `human` |
+| `-t`, `--think` | Thorough search mode (more turns, deeper verification) | |
 | `-v`, `--verbose` | Show agent search trace on stderr | |
 | `-q`, `--quiet` | Suppress all stderr output | |
 | `--version` | Print version and exit | |
@@ -141,6 +142,14 @@ Deduplicated file paths, one per line. Designed for `xargs`:
 
 ```bash
 probe --format=paths "auth" | xargs wc -l
+```
+
+### Quickfix
+
+Vim/Neovim quickfix-compatible format (`file:line:col: message`). Load results directly into your editor's quickfix list:
+
+```bash
+probe --format=qf "auth middleware" | vim -q /dev/stdin
 ```
 
 ## Exit codes
