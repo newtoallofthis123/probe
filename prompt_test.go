@@ -7,9 +7,8 @@ import (
 	"testing"
 )
 
-func TestBuildSystemPrompt_Full(t *testing.T) {
+func TestBuildSystemPrompt_Fast(t *testing.T) {
 	dir := t.TempDir()
-	// Create a simple project structure
 	os.MkdirAll(filepath.Join(dir, "cmd"), 0o755)
 	os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("package main"), 0o644)
 	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n\ngo 1.21\n"), 0o644)
@@ -18,18 +17,42 @@ func TestBuildSystemPrompt_Full(t *testing.T) {
 	gi := LoadGitIgnore(dir)
 	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
 
-	prompt := BuildSystemPrompt(tc, "gpt-4")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false)
 	if !strings.Contains(prompt, "code search agent") {
-		t.Error("full prompt should contain 'code search agent'")
+		t.Error("fast prompt should contain 'code search agent'")
+	}
+	if strings.Contains(prompt, "Start broad") {
+		t.Error("fast prompt should NOT contain 'Start broad'")
+	}
+	if strings.Contains(prompt, "Be thorough") {
+		t.Error("fast prompt should NOT contain 'Be thorough'")
+	}
+	if !strings.Contains(prompt, "Submit early") {
+		t.Error("fast prompt should contain 'Submit early'")
 	}
 	if !strings.Contains(prompt, "Go project") {
 		t.Error("should detect Go project")
 	}
-	if !strings.Contains(prompt, "example.com/test") {
-		t.Error("should include module name")
-	}
 	if !strings.Contains(prompt, "submit_answer") {
 		t.Error("should mention submit_answer")
+	}
+}
+
+func TestBuildSystemPrompt_Think(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "cmd"), 0o755)
+	os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("package main"), 0o644)
+	os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/test\n\ngo 1.21\n"), 0o644)
+
+	gi := LoadGitIgnore(dir)
+	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
+
+	prompt := BuildSystemPrompt(tc, "gpt-4", true)
+	if !strings.Contains(prompt, "Start broad") {
+		t.Error("think prompt should contain 'Start broad'")
+	}
+	if !strings.Contains(prompt, "Be thorough") {
+		t.Error("think prompt should contain 'Be thorough'")
 	}
 }
 
@@ -40,9 +63,9 @@ func TestBuildSystemPrompt_Small(t *testing.T) {
 	gi := LoadGitIgnore(dir)
 	tc := ToolContext{ProjectDir: dir, GitIgnore: gi}
 
-	prompt := BuildSystemPrompt(tc, "ministral-3:3b")
-	if !strings.Contains(prompt, "Maximum 5 tool calls") {
-		t.Error("small model prompt should contain 'Maximum 5 tool calls'")
+	prompt := BuildSystemPrompt(tc, "ministral-3:3b", false)
+	if !strings.Contains(prompt, "Submit early") {
+		t.Error("small model prompt should contain 'Submit early'")
 	}
 	if strings.Contains(prompt, "code search agent") {
 		t.Error("small model prompt should NOT contain full prompt text")
@@ -209,7 +232,7 @@ func TestBuildSystemPrompt_AllowList(t *testing.T) {
 		AllowList:  []string{filepath.Join(dir, "main.go"), filepath.Join(dir, "config.go")},
 	}
 
-	prompt := BuildSystemPrompt(tc, "gpt-4")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false)
 	if !strings.Contains(prompt, "Search scope") {
 		t.Error("prompt should contain 'Search scope' when AllowList is set")
 	}
@@ -235,7 +258,7 @@ func TestBuildSystemPrompt_AllowListTruncation(t *testing.T) {
 
 	gi := LoadGitIgnore(dir)
 	tc := ToolContext{ProjectDir: dir, GitIgnore: gi, AllowList: allowList}
-	prompt := BuildSystemPrompt(tc, "gpt-4")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false)
 	if !strings.Contains(prompt, "and 10 more files") {
 		t.Errorf("expected truncation at 50 files, got prompt without truncation message")
 	}

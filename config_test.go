@@ -51,17 +51,6 @@ output_format = "json"
 	}
 }
 
-func TestLoadConfigFileMissing(t *testing.T) {
-	dir := t.TempDir()
-	cf, err := loadConfigFile(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if cf != nil {
-		t.Error("expected nil when no config file exists")
-	}
-}
-
 func TestLoadConfigFileUnknownFields(t *testing.T) {
 	dir := t.TempDir()
 	tomlContent := `

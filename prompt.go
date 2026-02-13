@@ -11,11 +11,14 @@ import (
 )
 
 // BuildSystemPrompt generates the full system prompt with project context injected.
-func BuildSystemPrompt(tc ToolContext, model string) string {
+func BuildSystemPrompt(tc ToolContext, model string, think bool) string {
 	if isSmallModel(model) {
 		return buildSmallPrompt(tc)
 	}
-	return buildFullPrompt(tc)
+	if think {
+		return buildThinkPrompt(tc)
+	}
+	return buildFastPrompt(tc)
 }
 
 func isSmallModel(model string) bool {
@@ -26,14 +29,75 @@ func isSmallModel(model string) bool {
 func buildSmallPrompt(tc ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	return fmt.Sprintf(`Search the codebase for files matching the user's query.
-Use grep to find files, read_file to verify, then call submit_answer.
-You MUST call submit_answer when done — it is the only way to return results.
-Be precise with line numbers. Maximum 5 tool calls.
+Grep to find files, read_file for line numbers, then submit_answer.
+You MUST call submit_answer — it is the only way to return results.
+Your first good results are probably right. Submit early.
+NEVER guess line numbers — read the file to confirm.
 
 %s`, tree)
 }
 
-func buildFullPrompt(tc ToolContext) string {
+func buildFastPrompt(tc ToolContext) string {
+	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
+	langHint := detectLanguage(tc.ProjectDir)
+	fileStats := fileStats(tc.ProjectDir, tc.GitIgnore)
+
+	var buf strings.Builder
+	buf.WriteString(`You are a code search agent. Find files and line numbers matching the user's query.
+
+You already have the project structure below. Use it to make smart first moves.
+
+Strategy: grep first, read to get exact line numbers, submit. Don't over-search.
+Your first good results are probably the right ones. Submit early.
+
+Rules:
+- Don't explore tangentially related files
+- Don't verify what grep already told you unless you need exact line numbers
+- If you found it, submit. Don't keep looking for more.
+- NEVER guess line numbers — read the file to confirm ranges
+- Call submit_answer. It is the only way to return results.
+
+## Project context
+
+`)
+	buf.WriteString(tree)
+	buf.WriteString("\n\n")
+	if langHint != "" {
+		buf.WriteString(langHint)
+		buf.WriteString("\n\n")
+	}
+	buf.WriteString(fileStats)
+	buf.WriteString("\n")
+	if len(tc.AllowList) > 0 {
+		buf.WriteString("\n## Search scope\n\nYou are searching a specific set of files (provided via stdin), not the entire project.\n\nFiles in scope:\n")
+		limit := 50
+		for i, f := range tc.AllowList {
+			if i >= limit {
+				buf.WriteString(fmt.Sprintf("... and %d more files\n", len(tc.AllowList)-limit))
+				break
+			}
+			rel, _ := filepath.Rel(tc.ProjectDir, f)
+			buf.WriteString("- " + rel + "\n")
+		}
+		buf.WriteString("\nOnly search within these files. Do not look outside this set.\n")
+	}
+	buf.WriteString(`
+## Output
+
+You MUST call submit_answer when you are done. This is the only way to return results.
+If you respond with text instead of calling submit_answer, the user sees nothing.
+
+When you've found relevant code, call submit_answer with:
+- Each relevant file, its line range, and why it's relevant
+- A brief summary of what you found
+
+If you found nothing relevant, call submit_answer with an empty results array.
+
+Do not explain your search process. Just find the code and submit_answer.`)
+	return buf.String()
+}
+
+func buildThinkPrompt(tc ToolContext) string {
 	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
 	langHint := detectLanguage(tc.ProjectDir)
 	fileStats := fileStats(tc.ProjectDir, tc.GitIgnore)

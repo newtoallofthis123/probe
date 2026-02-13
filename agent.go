@@ -41,7 +41,7 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 		option.WithAPIKey(apiKey),
 	)
 
-	systemPrompt := BuildSystemPrompt(toolCtx, cfg.Model)
+	systemPrompt := BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think)
 	tools := ToolDefinitions()
 
 	messages := []openai.ChatCompletionMessageParamUnion{
@@ -215,6 +215,17 @@ func RunAgent(ctx context.Context, query string, cfg *Config, toolCtx ToolContex
 					ToolCallID: r.id,
 					Content: openai.ChatCompletionToolMessageParamContentUnion{
 						OfString: openai.String(r.result),
+					},
+				},
+			})
+		}
+
+		// Early-submit nudge in non-think mode
+		if !cfg.Think && turn == 3 {
+			messages = append(messages, openai.ChatCompletionMessageParamUnion{
+				OfSystem: &openai.ChatCompletionSystemMessageParam{
+					Content: openai.ChatCompletionSystemMessageParamContentUnion{
+						OfString: openai.String("You've had two turns to search but haven't submitted an answer yet, just a reminder."),
 					},
 				},
 			})

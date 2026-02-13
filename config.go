@@ -10,17 +10,18 @@ import (
 )
 
 type Config struct {
-	Model            string
-	BaseURL          string
-	APIKey           string
-	MaxTurns         int
-	ProjectDir       string
-	OutputFormat     string // "human", "json", "paths"
-	Verbose          bool
-	Quiet            bool
+	Model             string
+	BaseURL           string
+	APIKey            string
+	MaxTurns          int
+	ProjectDir        string
+	OutputFormat      string // "human", "json", "paths"
+	Verbose           bool
+	Quiet             bool
 	MaxResultsPerGrep int
 	MaxFileReadLines  int
 	ShowReasons       bool
+	Think             bool
 }
 
 func defaultConfig() Config {
@@ -59,7 +60,11 @@ func (c *Config) loadEnv(flagSet map[string]bool) {
 	if v := os.Getenv("PROBE_API_KEY"); v != "" {
 		c.APIKey = v
 	}
-
+	if !flagSet["think"] {
+		if v := os.Getenv("PROBE_THINK"); v != "" {
+			c.Think = v == "1" || v == "true"
+		}
+	}
 }
 
 // resolveProjectDir resolves ProjectDir to an absolute path and validates it.
@@ -81,14 +86,15 @@ func (c *Config) resolveProjectDir() error {
 
 // configFile represents the TOML config file schema.
 type configFile struct {
-	Model            string `toml:"model"`
-	BaseURL          string `toml:"base_url"`
-	APIKeyEnv        string `toml:"api_key_env"`
-	MaxTurns         int    `toml:"max_turns"`
-	MaxResultsPerGrep int   `toml:"max_results_per_grep"`
-	MaxFileReadLines  int   `toml:"max_file_read_lines"`
-	ShowReasons       *bool `toml:"show_reasons"`
+	Model             string `toml:"model"`
+	BaseURL           string `toml:"base_url"`
+	APIKeyEnv         string `toml:"api_key_env"`
+	MaxTurns          int    `toml:"max_turns"`
+	MaxResultsPerGrep int    `toml:"max_results_per_grep"`
+	MaxFileReadLines  int    `toml:"max_file_read_lines"`
+	ShowReasons       *bool  `toml:"show_reasons"`
 	OutputFormat      string `toml:"output_format"`
+	Think             *bool  `toml:"think"`
 }
 
 // loadConfigFile searches for a config file in standard locations.
@@ -151,6 +157,9 @@ func (c *Config) loadFile(projectDir string) error {
 	}
 	if cf.OutputFormat != "" {
 		c.OutputFormat = cf.OutputFormat
+	}
+	if cf.Think != nil {
+		c.Think = *cf.Think
 	}
 	return nil
 }

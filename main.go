@@ -73,6 +73,8 @@ func run() int {
 	flag.BoolVar(&cfg.Verbose, "v", false, "Show agent trace on stderr")
 	flag.BoolVar(&cfg.Quiet, "quiet", false, "Suppress all output except exit code")
 	flag.BoolVar(&cfg.Quiet, "q", false, "Suppress all output except exit code")
+	flag.BoolVar(&cfg.Think, "think", false, "Use thorough search mode (more turns, deeper verification)")
+	flag.BoolVar(&cfg.Think, "t", false, "Use thorough search mode (more turns, deeper verification)")
 	var stdinFlag bool
 	flag.BoolVar(&stdinFlag, "stdin", false, "Read file list from stdin (one path per line)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
