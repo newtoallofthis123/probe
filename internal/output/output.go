@@ -195,7 +195,7 @@ func summarizeToolCall(name string, argsJSON string) string {
 			return fmt.Sprintf("read %s:%s-%s", path, startLine, endLine)
 		}
 		return fmt.Sprintf("read %s", path)
-	case "list_dir":
+	case "tree":
 		return fmt.Sprintf("ls %s", extractJSONField(argsJSON, "path"))
 	case "submit_answer":
 		return "submit_answer"
@@ -217,8 +217,10 @@ func summarizeToolResult(name string, result string) string {
 		return fmt.Sprintf("%d files", len(lines))
 	case "read_file":
 		return fmt.Sprintf("%d lines", len(lines))
-	case "list_dir":
+	case "tree":
 		return fmt.Sprintf("%d entries", len(lines))
+	case "select_mode":
+		return fmt.Sprintf("mode: %s", result)
 	default:
 		return fmt.Sprintf("%d lines", len(lines))
 	}

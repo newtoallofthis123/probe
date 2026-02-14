@@ -14,14 +14,76 @@ import (
 )
 
 // BuildSystemPrompt generates the full system prompt with project context injected.
-func BuildSystemPrompt(tc tools.ToolContext, model string, think bool) string {
+func BuildSystemPrompt(tc tools.ToolContext, model string, think bool, mode string) string {
+	var base string
 	if isSmallModel(model) {
-		return buildSmallPrompt(tc)
+		base = buildSmallPrompt(tc)
+	} else if think {
+		base = buildThinkPrompt(tc)
+	} else {
+		base = buildFastPrompt(tc)
 	}
-	if think {
-		return buildThinkPrompt(tc)
+	if strategy := modeStrategy(mode); strategy != "" {
+		base += "\n\n" + strategy
 	}
-	return buildFastPrompt(tc)
+	return base
+}
+
+// BuildModeSelectionPrompt returns a minimal prompt for the auto mode first turn.
+func BuildModeSelectionPrompt(tc tools.ToolContext) string {
+	tree := projectTree(tc.ProjectDir, tc.GitIgnore)
+	return fmt.Sprintf(`You are a code search agent. Based on the user's query, choose the best search mode by calling select_mode.
+
+Modes:
+- locate: Find WHERE something is — a file, function, type, or config key. Fast, 1-3 turns.
+- explore: Understand HOW something works across the codebase. Thorough, reads multiple files.
+- trace: Follow something through the code — a call chain, data flow, or config propagation. Sequential.
+
+## Project structure
+
+%s
+
+Call select_mode with your chosen mode.`, tree)
+}
+
+func modeStrategy(mode string) string {
+	switch mode {
+	case "locate":
+		return `## Search Mode: Locate
+
+You are in LOCATE mode. The user wants to find WHERE something is — a file, function, type, or config key.
+
+Strategy:
+- For files: use tree or find_files first
+- For symbols: use grep with definition patterns first
+- Report the first confident match. Don't over-verify.
+- Skip reading file contents unless there's genuine ambiguity.
+- This should resolve in 1-3 turns. Be fast.`
+
+	case "explore":
+		return `## Search Mode: Explore
+
+You are in EXPLORE mode. The user wants to understand HOW something works across the codebase.
+
+Strategy:
+- Start broad: tree or find_files to identify candidate files
+- Use parallel tool calls to gather context from multiple files simultaneously
+- Synthesize findings across files — the value is in connecting dots
+- Return multiple files with context, not just paths
+- Be thorough. Check related files — imports, configs, tests.`
+
+	case "trace":
+		return `## Search Mode: Trace
+
+You are in TRACE mode. The user wants to follow something through the code — a call chain, data flow, or config propagation.
+
+Strategy:
+- Find the entry point first (this is a locate sub-task)
+- Follow references sequentially through the dependency chain
+- Report an ordered path with file:line references, not a bag of files
+- If the chain isn't complete by 70% budget, submit what you have and note it's partial.`
+	}
+	return ""
 }
 
 func isSmallModel(model string) bool {

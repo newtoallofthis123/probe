@@ -82,6 +82,8 @@ func run() int {
 	flag.BoolVar(&cfg.Quiet, "q", false, "Suppress all output except exit code")
 	flag.BoolVar(&cfg.Think, "think", false, "Use thorough search mode (more turns, deeper verification)")
 	flag.BoolVar(&cfg.Think, "t", false, "Use thorough search mode (more turns, deeper verification)")
+	flag.StringVar(&cfg.Mode, "mode", cfg.Mode, "Search mode: auto, locate, explore, trace")
+	flag.StringVar(&cfg.Mode, "m", cfg.Mode, "Search mode: auto, locate, explore, trace")
 	var stdinFlag bool
 	flag.BoolVar(&stdinFlag, "stdin", false, "Read file list from stdin (one path per line)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
@@ -136,6 +138,12 @@ func run() int {
 
 	// Load env vars for unset flags
 	cfg.LoadEnv(flagSet)
+
+	// Validate mode
+	if err := config.ValidateMode(cfg.Mode); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %s\n", err)
+		return ExitError
+	}
 
 	// Check prerequisites
 	if err := canExecute(); err != nil {

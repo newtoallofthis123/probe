@@ -146,3 +146,21 @@ func TestProjectTomlOverridesGlobal(t *testing.T) {
 		t.Errorf("project .probe.toml should win over global, got %q", cf.Model)
 	}
 }
+
+func TestValidateMode(t *testing.T) {
+	for _, mode := range []string{"auto", "locate", "explore", "trace"} {
+		if err := ValidateMode(mode); err != nil {
+			t.Errorf("ValidateMode(%q) returned error: %v", mode, err)
+		}
+	}
+	if err := ValidateMode("bogus"); err == nil {
+		t.Error("ValidateMode(\"bogus\") should return error")
+	}
+}
+
+func TestDefaultConfigMode(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.Mode != "auto" {
+		t.Errorf("expected default Mode=\"auto\", got %q", cfg.Mode)
+	}
+}

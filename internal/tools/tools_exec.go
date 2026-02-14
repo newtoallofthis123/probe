@@ -26,6 +26,15 @@ func (e *SubmitAnswerResult) Error() string {
 	return "submit_answer"
 }
 
+// SelectModeResult is a sentinel error returned when the LLM calls select_mode.
+type SelectModeResult struct {
+	Mode string
+}
+
+func (e *SelectModeResult) Error() string {
+	return "select_mode"
+}
+
 // ToolContext carries shared state for tool executors.
 type ToolContext struct {
 	ProjectDir        string
@@ -46,8 +55,16 @@ func ExecuteTool(ctx context.Context, name string, args json.RawMessage, tc Tool
 		return execFindFiles(args, tc)
 	case "read_file":
 		return execReadFile(args, tc)
-	case "list_dir":
-		return execListDir(args, tc)
+	case "tree":
+		return execTree(args, tc)
+	case "select_mode":
+		var params struct {
+			Mode string `json:"mode"`
+		}
+		if err := json.Unmarshal(args, &params); err != nil {
+			return fmt.Sprintf("Error: invalid arguments: %s", err), nil
+		}
+		return "", &SelectModeResult{Mode: params.Mode}
 	case "submit_answer":
 		return "", &SubmitAnswerResult{RawArgs: args}
 	default:
@@ -369,9 +386,9 @@ func listSiblings(dir string) string {
 	return strings.Join(names, ", ")
 }
 
-// --- execListDir ---
+// --- execTree ---
 
-func execListDir(args json.RawMessage, tc ToolContext) (string, error) {
+func execTree(args json.RawMessage, tc ToolContext) (string, error) {
 	var params struct {
 		Path  string `json:"path"`
 		Depth int    `json:"depth"`

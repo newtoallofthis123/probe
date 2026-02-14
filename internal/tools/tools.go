@@ -5,13 +5,38 @@ import (
 	"github.com/openai/openai-go/shared"
 )
 
+// SelectModeDefinition returns the select_mode tool for auto mode's first turn.
+func SelectModeDefinition() []openai.ChatCompletionToolParam {
+	return []openai.ChatCompletionToolParam{selectModeTool()}
+}
+
+func selectModeTool() openai.ChatCompletionToolParam {
+	return openai.ChatCompletionToolParam{
+		Function: shared.FunctionDefinitionParam{
+			Name:        "select_mode",
+			Description: openai.String("Choose the search mode for this query. Call this first before using any other tools."),
+			Parameters: shared.FunctionParameters{
+				"type": "object",
+				"properties": map[string]any{
+					"mode": map[string]any{
+						"type":        "string",
+						"enum":        []string{"locate", "explore", "trace"},
+						"description": "locate: find where something is. explore: understand how something works across files. trace: follow a call/data path through the code.",
+					},
+				},
+				"required": []string{"mode"},
+			},
+		},
+	}
+}
+
 // ToolDefinitions returns the 5 tool schemas the LLM can call.
 func ToolDefinitions() []openai.ChatCompletionToolParam {
 	return []openai.ChatCompletionToolParam{
 		grepTool(),
 		findFilesTool(),
 		readFileTool(),
-		listDirTool(),
+		treeTool(),
 		submitAnswerTool(),
 	}
 }
@@ -94,11 +119,11 @@ func readFileTool() openai.ChatCompletionToolParam {
 	}
 }
 
-func listDirTool() openai.ChatCompletionToolParam {
+func treeTool() openai.ChatCompletionToolParam {
 	return openai.ChatCompletionToolParam{
 		Function: shared.FunctionDefinitionParam{
-			Name:        "list_dir",
-			Description: openai.String("List directory contents as an indented tree. Defaults to project root at depth 2."),
+			Name:        "tree",
+			Description: openai.String("List directory contents as a tree. Returns indented output with files and subdirectories."),
 			Parameters: shared.FunctionParameters{
 				"type": "object",
 				"properties": map[string]any{

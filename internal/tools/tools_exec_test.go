@@ -121,15 +121,58 @@ func TestReadFileTruncation(t *testing.T) {
 	}
 }
 
-func TestListDirExecutor(t *testing.T) {
+func TestTreeExecutor(t *testing.T) {
 	tc := toolContext(t)
 	args := mustJSON(t, map[string]any{"depth": 1})
-	result, err := ExecuteTool(context.Background(), "list_dir", args, tc)
+	result, err := ExecuteTool(context.Background(), "tree", args, tc)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(result, "main.go") {
 		t.Errorf("expected main.go in listing, got:\n%s", result)
+	}
+}
+
+func TestTreeSandbox(t *testing.T) {
+	tc := toolContext(t)
+	args := mustJSON(t, map[string]any{"path": "../../etc"})
+	result, err := ExecuteTool(context.Background(), "tree", args, tc)
+	if err != nil {
+		t.Fatalf("expected nil Go error, got: %v", err)
+	}
+	if !strings.Contains(result, "outside the project directory") {
+		t.Errorf("expected sandbox error, got:\n%s", result)
+	}
+}
+
+func TestTreeGitignore(t *testing.T) {
+	tc := setupIgnoreDir(t, "node_modules\n", []string{
+		"src/main.go",
+		"node_modules/dep/index.js",
+	})
+	args := mustJSON(t, map[string]any{"depth": 3})
+	result, err := ExecuteTool(context.Background(), "tree", args, tc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(result, "node_modules") {
+		t.Errorf("tree should not show ignored dirs, got:\n%s", result)
+	}
+	if !strings.Contains(result, "main.go") {
+		t.Errorf("tree should show non-ignored files, got:\n%s", result)
+	}
+}
+
+func TestSelectMode(t *testing.T) {
+	tc := ToolContext{ProjectDir: "/tmp", GitIgnore: nil}
+	args := mustJSON(t, map[string]any{"mode": "explore"})
+	_, err := ExecuteTool(context.Background(), "select_mode", args, tc)
+	var sm *SelectModeResult
+	if !errors.As(err, &sm) {
+		t.Fatalf("expected SelectModeResult error, got: %v", err)
+	}
+	if sm.Mode != "explore" {
+		t.Errorf("expected mode 'explore', got %q", sm.Mode)
 	}
 }
 

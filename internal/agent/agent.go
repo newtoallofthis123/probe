@@ -54,7 +54,74 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		option.WithAPIKey(apiKey),
 	)
 
-	systemPrompt := prompt.BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think)
+	mode := cfg.Mode
+	turnsUsed := 0
+
+	// Auto mode: first turn selects the mode
+	if mode == "auto" {
+		modePrompt := prompt.BuildModeSelectionPrompt(toolCtx)
+		modeMessages := []openai.ChatCompletionMessageParamUnion{
+			{
+				OfSystem: &openai.ChatCompletionSystemMessageParam{
+					Content: openai.ChatCompletionSystemMessageParamContentUnion{
+						OfString: openai.String(modePrompt),
+					},
+				},
+			},
+			{
+				OfUser: &openai.ChatCompletionUserMessageParam{
+					Content: openai.ChatCompletionUserMessageParamContentUnion{
+						OfString: openai.String(query),
+					},
+				},
+			},
+		}
+
+		params := openai.ChatCompletionNewParams{
+			Model:    openai.ChatModel(cfg.Model),
+			Messages: modeMessages,
+			Tools:    tools.SelectModeDefinition(),
+			ToolChoice: openai.ChatCompletionToolChoiceOptionUnionParam{
+				OfChatCompletionNamedToolChoice: &openai.ChatCompletionNamedToolChoiceParam{
+					Function: openai.ChatCompletionNamedToolChoiceFunctionParam{
+						Name: "select_mode",
+					},
+				},
+			},
+		}
+
+		progress.StartSpinner("Selecting mode...")
+		stream := client.Chat.Completions.NewStreaming(ctx, params)
+		acc := openai.ChatCompletionAccumulator{}
+		for stream.Next() {
+			acc.AddChunk(stream.Current())
+		}
+		progress.StopSpinner()
+
+		if err := stream.Err(); err != nil {
+			return &AgentResult{Turns: 0}, fmt.Errorf("LLM API error during mode selection: %w", err)
+		}
+
+		turnsUsed = 1
+		mode = "locate" // default fallback
+
+		if len(acc.ChatCompletion.Choices) > 0 {
+			msg := acc.ChatCompletion.Choices[0].Message
+			for _, tc := range msg.ToolCalls {
+				if tc.Function.Name == "select_mode" {
+					_, err := tools.ExecuteTool(ctx, "select_mode", json.RawMessage(tc.Function.Arguments), toolCtx)
+					var sm *tools.SelectModeResult
+					if errors.As(err, &sm) {
+						mode = sm.Mode
+					}
+					break
+				}
+			}
+		}
+		progress.OnToolResult("select_mode", mode)
+	}
+
+	systemPrompt := prompt.BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think, mode)
 	toolDefs := tools.ToolDefinitions()
 
 	messages := []openai.ChatCompletionMessageParamUnion{
@@ -78,10 +145,22 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 	const tokenBudget = 14000
 	consecutiveEmpty := 0
 
-	for turn := 0; turn < cfg.MaxTurns; turn++ {
+	for turn := turnsUsed; turn < cfg.MaxTurns; turn++ {
 		if ctx.Err() != nil {
 			return &AgentResult{Turns: turn}, ctx.Err()
 		}
+
+		remaining := cfg.MaxTurns - turn - 1
+
+		// Inject turn count as system message
+		turnMsg := fmt.Sprintf("[Turn %d — %d remaining]", turn+1, remaining)
+		messages = append(messages, openai.ChatCompletionMessageParamUnion{
+			OfSystem: &openai.ChatCompletionSystemMessageParam{
+				Content: openai.ChatCompletionSystemMessageParamContentUnion{
+					OfString: openai.String(turnMsg),
+				},
+			},
+		})
 
 		params := openai.ChatCompletionNewParams{
 			Model:    openai.ChatModel(cfg.Model),
@@ -89,8 +168,8 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 			Tools:    toolDefs,
 		}
 
-		// Force submit_answer if token budget nearly exhausted
-		if totalTokens > int64(float64(tokenBudget)*0.8) {
+		// Force submit_answer if token budget nearly exhausted or last turn
+		if totalTokens > int64(float64(tokenBudget)*0.8) || remaining <= 0 {
 			params.ToolChoice = openai.ChatCompletionToolChoiceOptionUnionParam{
 				OfChatCompletionNamedToolChoice: &openai.ChatCompletionNamedToolChoiceParam{
 					Function: openai.ChatCompletionNamedToolChoiceFunctionParam{
@@ -123,7 +202,6 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 
 		// No tool calls — LLM responded with text only, inject nudge to submit
 		if len(msg.ToolCalls) == 0 {
-			// Append the text response and nudge to call submit_answer
 			if msg.Content != "" {
 				messages = append(messages, openai.ChatCompletionMessageParamUnion{
 					OfAssistant: &openai.ChatCompletionAssistantMessageParam{
@@ -233,26 +311,29 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 			})
 		}
 
-		// Early-submit nudge in non-think mode
-		if !cfg.Think && turn == 3 {
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{
-				OfSystem: &openai.ChatCompletionSystemMessageParam{
-					Content: openai.ChatCompletionSystemMessageParamContentUnion{
-						OfString: openai.String("You've had two turns to search but haven't submitted an answer yet, just a reminder."),
-					},
-				},
-			})
+		// Mode-specific turn pressure
+		switch mode {
+		case "locate":
+			if remaining <= 2 {
+				messages = append(messages, systemMsg("You're in locate mode with %d turns left. Submit your best match now.", remaining))
+			}
+		case "explore":
+			budget := cfg.MaxTurns - turnsUsed
+			used := turn - turnsUsed
+			if budget > 0 && float64(used) > float64(budget)*0.6 {
+				messages = append(messages, systemMsg("You've used over 60%% of your budget. Start submitting partial results."))
+			}
+		case "trace":
+			budget := cfg.MaxTurns - turnsUsed
+			used := turn - turnsUsed
+			if budget > 0 && float64(used) > float64(budget)*0.7 {
+				messages = append(messages, systemMsg("You've used over 70%% of your budget. Submit what you have, note if trace is partial."))
+			}
 		}
 
 		// Nudge after 3 consecutive empty results
 		if consecutiveEmpty >= 3 {
-			messages = append(messages, openai.ChatCompletionMessageParamUnion{
-				OfSystem: &openai.ChatCompletionSystemMessageParam{
-					Content: openai.ChatCompletionSystemMessageParamContentUnion{
-						OfString: openai.String("Your last 3 searches returned no results. Consider trying different search terms, broader patterns, or submit an empty answer if nothing is relevant."),
-					},
-				},
-			})
+			messages = append(messages, systemMsg("Your last 3 searches returned no results. Consider trying different search terms, broader patterns, or submit an empty answer if nothing is relevant."))
 			consecutiveEmpty = 0
 		}
 
@@ -268,6 +349,17 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		Turns:   cfg.MaxTurns,
 		Summary: "Agent exhausted maximum turns without submitting an answer",
 	}, nil
+}
+
+// systemMsg creates a system message for injection into the conversation.
+func systemMsg(format string, args ...any) openai.ChatCompletionMessageParamUnion {
+	return openai.ChatCompletionMessageParamUnion{
+		OfSystem: &openai.ChatCompletionSystemMessageParam{
+			Content: openai.ChatCompletionSystemMessageParamContentUnion{
+				OfString: openai.String(fmt.Sprintf(format, args...)),
+			},
+		},
+	}
 }
 
 // parseSubmitAnswer extracts an AgentResult from submit_answer arguments.

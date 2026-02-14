@@ -19,7 +19,7 @@ func TestSummarizeToolCall(t *testing.T) {
 		{"find", "find_files", `{"pattern":"*.go"}`, `find *.go`},
 		{"read full", "read_file", `{"path":"main.go"}`, `read main.go`},
 		{"read range", "read_file", `{"path":"main.go","start_line":"1","end_line":"30"}`, `read main.go:1-30`},
-		{"list_dir", "list_dir", `{"path":"src"}`, `ls src`},
+		{"tree", "tree", `{"path":"src"}`, `ls src`},
 		{"submit_answer", "submit_answer", `{}`, `submit_answer`},
 		{"unknown", "some_tool", `{}`, `some_tool`},
 	}
@@ -44,7 +44,7 @@ func TestSummarizeToolResult(t *testing.T) {
 		{"grep matches", "grep", "main.go:1:func main()\nmain.go:5:func foo()", "2 matches"},
 		{"find files", "find_files", "a.go\nb.go\nc.go", "3 files"},
 		{"read lines", "read_file", "line1\nline2\nline3\nline4", "4 lines"},
-		{"list entries", "list_dir", "a/\nb/\nc.go", "3 entries"},
+		{"list entries", "tree", "a/\nb/\nc.go", "3 entries"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

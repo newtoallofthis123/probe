@@ -22,6 +22,7 @@ type Config struct {
 	MaxFileReadLines  int
 	ShowReasons       bool
 	Think             bool
+	Mode              string // "auto", "locate", "explore", "trace"
 }
 
 func DefaultConfig() Config {
@@ -34,6 +35,7 @@ func DefaultConfig() Config {
 		MaxResultsPerGrep: 30,
 		MaxFileReadLines:  200,
 		ShowReasons:       true,
+		Mode:              "auto",
 	}
 }
 
@@ -59,6 +61,11 @@ func (c *Config) LoadEnv(flagSet map[string]bool) {
 	}
 	if v := os.Getenv("PROBE_API_KEY"); v != "" {
 		c.APIKey = v
+	}
+	if !flagSet["mode"] {
+		if v := os.Getenv("PROBE_MODE"); v != "" {
+			c.Mode = v
+		}
 	}
 	if !flagSet["think"] {
 		if v := os.Getenv("PROBE_THINK"); v != "" {
@@ -95,6 +102,7 @@ type configFile struct {
 	ShowReasons       *bool  `toml:"show_reasons"`
 	OutputFormat      string `toml:"output_format"`
 	Think             *bool  `toml:"think"`
+	Mode              string `toml:"mode"`
 }
 
 // loadConfigFile searches for a config file in standard locations.
@@ -161,5 +169,18 @@ func (c *Config) LoadFile(projectDir string) error {
 	if cf.Think != nil {
 		c.Think = *cf.Think
 	}
+	if cf.Mode != "" {
+		c.Mode = cf.Mode
+	}
 	return nil
+}
+
+// ValidateMode checks that the mode string is valid.
+func ValidateMode(mode string) error {
+	switch mode {
+	case "auto", "locate", "explore", "trace":
+		return nil
+	default:
+		return fmt.Errorf("invalid mode '%s': must be auto, locate, explore, or trace", mode)
+	}
 }
