@@ -54,7 +54,7 @@ No embeddings. No vector database. No indexing step. probe hands an LLM a few Un
 ## What makes it different
 
 - **Zero setup** — `go install` and go. No indexing, no config files, no database
-- **Any LLM** — works with Ollama locally, or OpenAI/Groq/OpenRouter in the cloud
+- **Any LLM** — works with Ollama locally, or OpenAI/Anthropic/Google/Groq/OpenRouter in the cloud
 - **Pipe-friendly** — stdout has results, stderr has everything else. Plays nice with Unix
 - **Read-only** — probe never writes to your codebase. All paths are sandboxed
 - **Fast** — small models (3B) work great. Most searches finish in under 5 seconds
@@ -86,20 +86,23 @@ That's it. No config files needed. probe auto-detects your project language, res
 
 ### Using a cloud provider
 
-Point probe at any OpenAI-compatible endpoint:
+probe supports OpenAI, Anthropic, and Google natively. The provider is auto-detected from your API key prefix, or you can set it explicitly with `--provider`.
 
 ```bash
 # OpenAI
 export PROBE_API_KEY="sk-..."
-export PROBE_BASE_URL="https://api.openai.com/v1"
 export PROBE_MODEL="gpt-4o-mini"
 
-# Anthropic (via OpenRouter)
-export PROBE_API_KEY="sk-or-..."
-export PROBE_BASE_URL="https://openrouter.ai/api/v1"
-export PROBE_MODEL="anthropic/claude-sonnet-4-20250514"
+# Anthropic (native — no proxy needed)
+export PROBE_API_KEY="sk-ant-..."
+export PROBE_MODEL="claude-sonnet-4-5-20250929"
 
-# Groq
+# Google Gemini
+export PROBE_API_KEY="AI..."
+export PROBE_MODEL="gemini-2.0-flash"
+export PROBE_PROVIDER="google"
+
+# Any OpenAI-compatible endpoint (Groq, OpenRouter, etc.)
 export PROBE_API_KEY="gsk_..."
 export PROBE_BASE_URL="https://api.groq.com/openai/v1"
 export PROBE_MODEL="llama-3.3-70b-versatile"
@@ -126,6 +129,7 @@ probe [flags] <query>
 | `-m`, `--mode <mode>` | Search mode: `auto`, `locate`, `explore`, `trace` | `auto` |
 | `-t`, `--think` | Thorough search mode (more turns, deeper verification) | |
 | `--stdin` | Read file list from stdin to scope the search | |
+| `--provider <name>` | LLM provider: `openai`, `anthropic`, `google` (auto-detected) | |
 | `-v`, `--verbose` | Show agent search trace on stderr | |
 | `-q`, `--quiet` | Suppress all stderr output | |
 | `--list` | List past queries for the current directory | |
@@ -142,6 +146,7 @@ probe [flags] <query>
 | `PROBE_BASE_URL` | Default API base URL |
 | `PROBE_MAX_TURNS` | Default max turns |
 | `PROBE_MODE` | Default search mode (`auto`, `locate`, `explore`, `trace`) |
+| `PROBE_PROVIDER` | LLM provider (`openai`, `anthropic`, `google`) |
 | `PROBE_THINK` | Enable think mode (`1` or `true`) |
 
 Precedence: flags > environment variables > config file > defaults.
@@ -164,6 +169,7 @@ output_format = "human"
 show_reasons = true
 think = false
 mode = "auto"              # auto, locate, explore, trace
+provider = ""              # openai, anthropic, google (auto-detected if empty)
 ```
 
 Drop a `.probe.toml` in any project root to override globals for that repo:
