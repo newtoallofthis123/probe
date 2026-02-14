@@ -56,6 +56,7 @@ You are in LOCATE mode. The user wants to find WHERE something is — a file, fu
 Strategy:
 - For files: use tree or find_files first
 - For symbols: use grep with definition patterns first
+- If multiple candidate patterns exist, grep for them all in one turn
 - Report the first confident match. Don't over-verify.
 - Skip reading file contents unless there's genuine ambiguity.
 - This should resolve in 1-3 turns. Be fast.`
@@ -67,7 +68,7 @@ You are in EXPLORE mode. The user wants to understand HOW something works across
 
 Strategy:
 - Start broad: tree or find_files to identify candidate files
-- Use parallel tool calls to gather context from multiple files simultaneously
+- Read multiple candidate files in a single turn — don't read them one at a time
 - Synthesize findings across files — the value is in connecting dots
 - Return multiple files with context, not just paths
 - Be thorough. Check related files — imports, configs, tests.`
@@ -79,7 +80,8 @@ You are in TRACE mode. The user wants to follow something through the code — a
 
 Strategy:
 - Find the entry point first (this is a locate sub-task)
-- Follow references sequentially through the dependency chain
+- Follow references through the dependency chain
+- When grep reveals multiple files to read, read them all in one turn
 - Report an ordered path with file:line references, not a bag of files
 - If the chain isn't complete by 70% budget, submit what you have and note it's partial.`
 	}
@@ -114,6 +116,10 @@ You already have the project structure below. Use it to make smart first moves.
 
 Strategy: grep first, read to get exact line numbers, submit. Don't over-search.
 Your first good results are probably the right ones. Submit early.
+
+IMPORTANT: Always call multiple tools in a single turn when they are independent.
+For example, if grep returns 3 candidate files, read all 3 in one turn — don't read them one at a time.
+If you need to search for two patterns, call grep twice in the same turn.
 
 Rules:
 - Don't explore tangentially related files
@@ -180,8 +186,12 @@ the relevant code. Start broad, then refine.
 Typical workflow:
 1. Look at the project structure to orient yourself
 2. Use grep/find to locate candidate files
-3. Read the most promising files to confirm relevance
+3. Read the most promising files to confirm relevance — read multiple files in one turn
 4. Submit your final results with exact line numbers
+
+IMPORTANT: Always call multiple tools in a single turn when they are independent.
+For example, if grep returns 3 candidate files, read all 3 in one turn — don't read them one at a time.
+If you need to search for two patterns, call grep twice in the same turn.
 
 ## Rules
 

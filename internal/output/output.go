@@ -101,6 +101,50 @@ func (p *Progress) OnToolResult(name string, result string) {
 	}
 }
 
+// OnToolCallBatch prints a single line summarizing multiple parallel tool calls.
+func (p *Progress) OnToolCallBatch(calls []agent.ToolCallInfo) {
+	if !p.shouldShow() {
+		return
+	}
+	p.StopSpinner()
+	summaries := make([]string, len(calls))
+	for i, c := range calls {
+		summaries[i] = summarizeToolCall(c.Name, c.Args)
+	}
+	fmt.Fprintf(os.Stderr, "├─ %s\n", strings.Join(summaries, ", "))
+	if p.verbose {
+		for _, c := range calls {
+			fmt.Fprintf(os.Stderr, "    [%s] %s\n", c.Name, c.Args)
+		}
+	}
+}
+
+// OnToolResultBatch prints a single line summarizing multiple parallel tool results.
+func (p *Progress) OnToolResultBatch(results []agent.ToolResultInfo) {
+	if !p.shouldShow() {
+		return
+	}
+	summaries := make([]string, len(results))
+	for i, r := range results {
+		summaries[i] = summarizeToolResult(r.Name, r.Result)
+	}
+	fmt.Fprintf(os.Stderr, "│  → %s\n", strings.Join(summaries, ", "))
+	if p.verbose {
+		for _, r := range results {
+			lines := strings.Split(r.Result, "\n")
+			limit := 10
+			fmt.Fprintf(os.Stderr, "    [%s]\n", r.Name)
+			for j, line := range lines {
+				if j >= limit {
+					fmt.Fprintf(os.Stderr, "    ... (%d more lines)\n", len(lines)-limit)
+					break
+				}
+				fmt.Fprintf(os.Stderr, "    %s\n", line)
+			}
+		}
+	}
+}
+
 // OnTokenUsage prints token usage in verbose mode.
 func (p *Progress) OnTokenUsage(input, output, total int64) {
 	if !p.verbose || p.quiet {

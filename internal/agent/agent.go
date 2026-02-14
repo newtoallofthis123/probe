@@ -22,7 +22,21 @@ type ProgressReporter interface {
 	StopSpinner()
 	OnToolCall(name string, args string)
 	OnToolResult(name string, result string)
+	OnToolCallBatch(calls []ToolCallInfo)
+	OnToolResultBatch(results []ToolResultInfo)
 	OnTokenUsage(input, output, total int64)
+}
+
+// ToolCallInfo carries a tool call summary for batch rendering.
+type ToolCallInfo struct {
+	Name string
+	Args string
+}
+
+// ToolResultInfo carries a tool result summary for batch rendering.
+type ToolResultInfo struct {
+	Name   string
+	Result string
 }
 
 // SearchResult represents a single code location found by the agent.
@@ -163,9 +177,10 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		})
 
 		params := openai.ChatCompletionNewParams{
-			Model:    openai.ChatModel(cfg.Model),
-			Messages: messages,
-			Tools:    toolDefs,
+			Model:             openai.ChatModel(cfg.Model),
+			Messages:          messages,
+			Tools:             toolDefs,
+			ParallelToolCalls: openai.Bool(true),
 		}
 
 		// Force submit_answer if token budget nearly exhausted or last turn
@@ -249,6 +264,7 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		// Execute tool calls in parallel
 		type toolResult struct {
 			id     string
+			name   string
 			result string
 		}
 		results := make([]toolResult, len(msg.ToolCalls))
@@ -256,8 +272,20 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		var wg sync.WaitGroup
 		var execErr error
 
+		isBatch := len(msg.ToolCalls) > 1
+
+		if isBatch {
+			calls := make([]ToolCallInfo, len(msg.ToolCalls))
+			for i, tc := range msg.ToolCalls {
+				calls[i] = ToolCallInfo{Name: tc.Function.Name, Args: tc.Function.Arguments}
+			}
+			progress.OnToolCallBatch(calls)
+		}
+
 		for i, tc := range msg.ToolCalls {
-			progress.OnToolCall(tc.Function.Name, tc.Function.Arguments)
+			if !isBatch {
+				progress.OnToolCall(tc.Function.Name, tc.Function.Arguments)
+			}
 			wg.Add(1)
 			go func(idx int, tc openai.ChatCompletionMessageToolCall) {
 				defer wg.Done()
@@ -272,11 +300,23 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 					execErr = err
 					return
 				}
-				results[idx] = toolResult{id: tc.ID, result: res}
-				progress.OnToolResult(tc.Function.Name, res)
+				results[idx] = toolResult{id: tc.ID, name: tc.Function.Name, result: res}
+				if !isBatch {
+					progress.OnToolResult(tc.Function.Name, res)
+				}
 			}(i, tc)
 		}
 		wg.Wait()
+
+		if isBatch {
+			infos := make([]ToolResultInfo, 0, len(results))
+			for _, r := range results {
+				if r.id != "" {
+					infos = append(infos, ToolResultInfo{Name: r.name, Result: r.result})
+				}
+			}
+			progress.OnToolResultBatch(infos)
+		}
 
 		if execErr != nil {
 			return &AgentResult{Turns: turn + 1}, fmt.Errorf("tool execution failed: %w", execErr)
