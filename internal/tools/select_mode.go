@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/openai/openai-go"
+	"github.com/newtoallofthis/probe/internal/connector"
 )
 
 // SelectModeTool lets the LLM choose a search mode.
@@ -13,8 +13,8 @@ type SelectModeTool struct{}
 
 func (s *SelectModeTool) Name() string { return "select_mode" }
 
-func (s *SelectModeTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("select_mode", "Choose the search mode for this query. Call this first before using any other tools.", map[string]any{
+func (s *SelectModeTool) Schema() connector.ToolSchema {
+	return toolSchema("select_mode", "Choose the search mode for this query. Call this first before using any other tools.", map[string]any{
 		"mode": map[string]any{
 			"type":        "string",
 			"enum":        []string{"locate", "explore", "trace"},

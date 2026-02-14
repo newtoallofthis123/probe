@@ -5,9 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/newtoallofthis/probe/internal/connector"
 	"github.com/newtoallofthis/probe/internal/sandbox"
-	"github.com/openai/openai-go"
-	"github.com/openai/openai-go/shared"
 )
 
 // SubmitAnswerResult is a sentinel error returned when the LLM calls submit_answer.
@@ -41,7 +40,7 @@ type ToolContext struct {
 // Tool is the interface every tool implements.
 type Tool interface {
 	Name() string
-	Schema() openai.ChatCompletionToolParam
+	Schema() connector.ToolSchema
 	Execute(ctx context.Context, tc ToolContext, args json.RawMessage) (string, error)
 }
 
@@ -71,14 +70,14 @@ func ExecuteTool(ctx context.Context, name string, args json.RawMessage, tc Tool
 }
 
 // SelectModeDefinition returns the select_mode tool for auto mode's first turn.
-func SelectModeDefinition() []openai.ChatCompletionToolParam {
-	return []openai.ChatCompletionToolParam{registry["select_mode"].Schema()}
+func SelectModeDefinition() []connector.ToolSchema {
+	return []connector.ToolSchema{registry["select_mode"].Schema()}
 }
 
 // ToolDefinitions returns the tool schemas the LLM can call (excludes select_mode).
-func ToolDefinitions() []openai.ChatCompletionToolParam {
+func ToolDefinitions() []connector.ToolSchema {
 	order := []string{"grep", "find_files", "read_file", "tree", "submit_answer"}
-	defs := make([]openai.ChatCompletionToolParam, 0, len(order))
+	defs := make([]connector.ToolSchema, 0, len(order))
 	for _, name := range order {
 		if t, ok := registry[name]; ok {
 			defs = append(defs, t.Schema())
@@ -87,20 +86,18 @@ func ToolDefinitions() []openai.ChatCompletionToolParam {
 	return defs
 }
 
-// helper to build tool params (reduces boilerplate in tool files)
-func toolParam(name, description string, properties map[string]any, required []string) openai.ChatCompletionToolParam {
-	params := shared.FunctionParameters{
+// toolSchema builds a connector.ToolSchema (reduces boilerplate in tool files).
+func toolSchema(name, description string, properties map[string]any, required []string) connector.ToolSchema {
+	params := map[string]any{
 		"type":       "object",
 		"properties": properties,
 	}
 	if len(required) > 0 {
 		params["required"] = required
 	}
-	return openai.ChatCompletionToolParam{
-		Function: shared.FunctionDefinitionParam{
-			Name:        name,
-			Description: openai.String(description),
-			Parameters:  params,
-		},
+	return connector.ToolSchema{
+		Name:        name,
+		Description: description,
+		Parameters:  params,
 	}
 }

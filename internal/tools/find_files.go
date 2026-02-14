@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	"github.com/openai/openai-go"
+	"github.com/newtoallofthis/probe/internal/connector"
 )
 
 // FindFilesTool finds files and directories by glob pattern.
@@ -17,8 +17,8 @@ type FindFilesTool struct{}
 
 func (f *FindFilesTool) Name() string { return "find_files" }
 
-func (f *FindFilesTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("find_files", "Find files and directories by glob pattern. Returns paths relative to project root.", map[string]any{
+func (f *FindFilesTool) Schema() connector.ToolSchema {
+	return toolSchema("find_files", "Find files and directories by glob pattern. Returns paths relative to project root.", map[string]any{
 		"pattern": map[string]any{
 			"type":        "string",
 			"description": "Glob pattern to match (supports ** for recursive matching).",

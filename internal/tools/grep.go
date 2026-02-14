@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/openai/openai-go"
+	"github.com/newtoallofthis/probe/internal/connector"
 )
 
 // GrepTool searches file contents using ripgrep.
@@ -18,8 +18,8 @@ type GrepTool struct{}
 
 func (g *GrepTool) Name() string { return "grep" }
 
-func (g *GrepTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("grep", "Search file contents using ripgrep. Returns matching lines with file paths and line numbers.", map[string]any{
+func (g *GrepTool) Schema() connector.ToolSchema {
+	return toolSchema("grep", "Search file contents using ripgrep. Returns matching lines with file paths and line numbers.", map[string]any{
 		"pattern": map[string]any{
 			"type":        "string",
 			"description": "Regular expression pattern to search for.",

@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/openai/openai-go"
+	"github.com/newtoallofthis/probe/internal/connector"
 )
 
 // SubmitAnswerTool submits the final answer with file locations.
@@ -12,8 +12,8 @@ type SubmitAnswerTool struct{}
 
 func (s *SubmitAnswerTool) Name() string { return "submit_answer" }
 
-func (s *SubmitAnswerTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("submit_answer", "Submit the final answer with file locations and a summary. Call this when you have found the relevant code.", map[string]any{
+func (s *SubmitAnswerTool) Schema() connector.ToolSchema {
+	return toolSchema("submit_answer", "Submit the final answer with file locations and a summary. Call this when you have found the relevant code.", map[string]any{
 		"results": map[string]any{
 			"type": "array",
 			"items": map[string]any{

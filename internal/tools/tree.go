@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/newtoallofthis/probe/internal/connector"
 	"github.com/newtoallofthis/probe/internal/sandbox"
-	"github.com/openai/openai-go"
 )
 
 // TreeTool lists directory contents as a tree.
@@ -17,8 +17,8 @@ type TreeTool struct{}
 
 func (t *TreeTool) Name() string { return "tree" }
 
-func (t *TreeTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("tree", "List directory contents as a tree. Returns indented output with files and subdirectories.", map[string]any{
+func (t *TreeTool) Schema() connector.ToolSchema {
+	return toolSchema("tree", "List directory contents as a tree. Returns indented output with files and subdirectories.", map[string]any{
 		"path": map[string]any{
 			"type":        "string",
 			"description": "Directory path relative to project root (default: \".\").",

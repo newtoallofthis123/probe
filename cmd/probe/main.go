@@ -15,6 +15,7 @@ import (
 
 	"github.com/newtoallofthis/probe/internal/agent"
 	"github.com/newtoallofthis/probe/internal/config"
+	"github.com/newtoallofthis/probe/internal/connector"
 	"github.com/newtoallofthis/probe/internal/history"
 	"github.com/newtoallofthis/probe/internal/output"
 	"github.com/newtoallofthis/probe/internal/sandbox"
@@ -84,6 +85,7 @@ func run() int {
 	flag.BoolVar(&cfg.Think, "t", false, "Use thorough search mode (more turns, deeper verification)")
 	flag.StringVar(&cfg.Mode, "mode", cfg.Mode, "Search mode: auto, locate, explore, trace")
 	flag.StringVar(&cfg.Mode, "m", cfg.Mode, "Search mode: auto, locate, explore, trace")
+	flag.StringVar(&cfg.Provider, "provider", cfg.Provider, "LLM provider: openai, anthropic, google (auto-detected if empty)")
 	var stdinFlag bool
 	flag.BoolVar(&stdinFlag, "stdin", false, "Read file list from stdin (one path per line)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
@@ -251,8 +253,14 @@ func run() int {
 		AllowList:         allowList,
 	}
 
+	conn, err := connector.Resolve(&cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return ExitError
+	}
+
 	progress := output.NewProgress(cfg.Verbose, cfg.Quiet)
-	result, err := agent.RunAgent(ctx, query, &cfg, toolCtx, progress)
+	result, err := agent.RunAgent(ctx, query, &cfg, toolCtx, conn, progress)
 	if err != nil {
 		progress.StopSpinner()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)

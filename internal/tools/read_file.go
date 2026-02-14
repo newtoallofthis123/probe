@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/newtoallofthis/probe/internal/connector"
 	"github.com/newtoallofthis/probe/internal/sandbox"
-	"github.com/openai/openai-go"
 )
 
 // ReadFileTool reads file contents with line numbers.
@@ -18,8 +18,8 @@ type ReadFileTool struct{}
 
 func (r *ReadFileTool) Name() string { return "read_file" }
 
-func (r *ReadFileTool) Schema() openai.ChatCompletionToolParam {
-	return toolParam("read_file", "Read the contents of a file with line numbers. Paths are relative to the project root.", map[string]any{
+func (r *ReadFileTool) Schema() connector.ToolSchema {
+	return toolSchema("read_file", "Read the contents of a file with line numbers. Paths are relative to the project root.", map[string]any{
 		"path": map[string]any{
 			"type":        "string",
 			"description": "File path relative to project root.",
