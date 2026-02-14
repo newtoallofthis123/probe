@@ -8,19 +8,36 @@ probe is an agent loop. It sends your query to an LLM along with your project's 
 User query
     │
     ▼
-Build system prompt (project tree, language hints, recent files)
+Mode selection (auto: LLM calls select_mode to pick locate/explore/trace)
+    │
+    ▼
+Build system prompt (project tree, language hints, mode strategy)
     │
     ▼
 Agent loop (up to --max-turns iterations):
     │
+    ├─ [Turn N — M remaining] injected as system message
     ├─ LLM decides which tools to call
-    ├─ Tools execute in parallel (grep, find, read, list)
+    ├─ Tools execute in parallel (grep, find, read, tree)
     ├─ Results fed back to LLM
+    ├─ Mode-specific turn pressure applied
     └─ Repeat until LLM calls submit_answer
     │
     ▼
 Format and print results
 ```
+
+### Search modes
+
+In `auto` mode (default), the first turn uses a forced `select_mode` tool call so the LLM declares its approach before searching. In explicit mode (`-m locate`), this turn is skipped.
+
+| Mode | Strategy |
+|---|---|
+| `locate` | Find WHERE something is. Fast, 1-3 turns. Nudges submission at 2 turns remaining. |
+| `explore` | Understand HOW something works. Thorough, reads multiple files. Pressure at 60% budget. |
+| `trace` | Follow a path through code. Sequential. Pressure at 70% budget. |
+
+### Tools
 
 The LLM has five tools:
 
@@ -29,7 +46,7 @@ The LLM has five tools:
 | `grep` | Search file contents with ripgrep (regex, globs) |
 | `find_files` | Discover files/directories by pattern |
 | `read_file` | Read file contents with line numbers |
-| `list_dir` | List directory tree |
+| `tree` | List directory tree |
 | `submit_answer` | Return final results with file locations |
 
 All tools are **read-only**. All file paths are **sandboxed** to the project directory. Results are **filtered** through `.gitignore`. Tool output is **truncated** with feedback so the LLM knows its view is partial.

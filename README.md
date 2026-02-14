@@ -19,6 +19,7 @@ Ask a question in plain English. Get back file paths and line numbers.
 - [Output formats](#output-formats)
 - [Vim / Neovim integration](#vim--neovim-integration)
 - [Scoped search with `--stdin`](#scoped-search-with---stdin)
+- [Search modes](#search-modes)
 - [Think mode](#think-mode)
 - [Verbose mode](#verbose-mode)
 - [How it works](#how-it-works)
@@ -121,6 +122,7 @@ probe [flags] <query>
 | `--dir <path>` | Project directory to search | `.` |
 | `--json` | Output results as JSON | |
 | `--format <fmt>` | Output format: `human`, `json`, `paths`, `qf` | `human` |
+| `-m`, `--mode <mode>` | Search mode: `auto`, `locate`, `explore`, `trace` | `auto` |
 | `-t`, `--think` | Thorough search mode (more turns, deeper verification) | |
 | `--stdin` | Read file list from stdin to scope the search | |
 | `-v`, `--verbose` | Show agent search trace on stderr | |
@@ -135,6 +137,7 @@ probe [flags] <query>
 | `PROBE_MODEL` | Default model name |
 | `PROBE_BASE_URL` | Default API base URL |
 | `PROBE_MAX_TURNS` | Default max turns |
+| `PROBE_MODE` | Default search mode (`auto`, `locate`, `explore`, `trace`) |
 | `PROBE_THINK` | Enable think mode (`1` or `true`) |
 
 Precedence: flags > environment variables > config file > defaults.
@@ -156,6 +159,7 @@ max_turns = 15
 output_format = "human"
 show_reasons = true
 think = false
+mode = "auto"              # auto, locate, explore, trace
 ```
 
 Drop a `.probe.toml` in any project root to override globals for that repo:
@@ -272,6 +276,28 @@ git log --since="1 week ago" --name-only --format="" | sort -u | probe --stdin "
 find src/api -name "*.go" | probe --stdin "where is the rate limiter?"
 ```
 
+## Search modes
+
+probe supports three search modes that control how the agent approaches your query. By default (`--mode auto`), the LLM picks the best mode automatically on the first turn.
+
+| Mode | When to use | Behavior |
+|---|---|---|
+| `locate` | "Where is X?" | Fast. Finds the file/function and submits in 1-3 turns. |
+| `explore` | "How does X work?" | Thorough. Reads multiple files, synthesizes across the codebase. |
+| `trace` | "Follow the call chain from X to Y" | Sequential. Follows references through the dependency chain. |
+
+```bash
+# Let the LLM choose (default)
+probe "where is the auth middleware?"
+
+# Force a specific mode
+probe -m locate "where is main?"
+probe -m explore "how does the billing system work?"
+probe -m trace "follow a request from the HTTP handler to the database"
+```
+
+Each mode injects turn-aware pressure — the agent sees `[Turn N — M remaining]` each iteration and adjusts its depth accordingly. Locate mode nudges early submission; explore and trace modes allow deeper investigation before applying pressure.
+
 ## Think mode
 
 For complex questions that need deeper investigation, use `-t` / `--think`:
@@ -321,14 +347,19 @@ probe "auth" && echo "found" || echo "nothing"
 probe is an agent loop. It sends your query to an LLM along with your project's directory tree, then lets the LLM iteratively call search tools until it finds what you asked for:
 
 ```
-User query → System prompt (project tree, language hints)
+User query → Mode selection (auto: LLM picks locate/explore/trace)
+                │
+                ▼
+         System prompt (project tree, language hints, mode strategy)
                 │
                 ▼
          Agent loop (up to --max-turns):
                 │
+                ├─ [Turn N — M remaining] injected
                 ├─ LLM picks tools to call
                 ├─ Tools run in parallel
                 ├─ Results fed back to LLM
+                ├─ Mode-specific pressure applied
                 └─ Repeat until submit_answer
                 │
                 ▼
@@ -342,7 +373,7 @@ The LLM has five tools:
 | `grep` | Search file contents with ripgrep (regex, globs) |
 | `find_files` | Discover files/directories by pattern |
 | `read_file` | Read file contents with line numbers |
-| `list_dir` | List directory tree |
+| `tree` | List directory tree |
 | `submit_answer` | Return final results with file locations |
 
 All tools are **read-only** and **sandboxed** to the project directory. Results are filtered through `.gitignore` and truncated with feedback so the LLM knows its view is partial.
