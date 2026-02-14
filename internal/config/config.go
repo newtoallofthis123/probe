@@ -184,13 +184,3 @@ func (c *Config) LoadFile(projectDir string) error {
 	}
 	return nil
 }
-
-// ValidateMode checks that the mode string is valid.
-func ValidateMode(mode string) error {
-	switch mode {
-	case "auto", "locate", "explore", "trace":
-		return nil
-	default:
-		return fmt.Errorf("invalid mode '%s': must be auto, locate, explore, or trace", mode)
-	}
-}

@@ -10,6 +10,7 @@ import (
 
 	"github.com/newtoallofthis/probe/internal/config"
 	"github.com/newtoallofthis/probe/internal/connector"
+	"github.com/newtoallofthis/probe/internal/modes"
 	"github.com/newtoallofthis/probe/internal/prompt"
 	"github.com/newtoallofthis/probe/internal/tools"
 )
@@ -56,12 +57,12 @@ type AgentResult struct {
 // RunAgent executes the agent loop: sends the query to the LLM, handles tool
 // calls iteratively, and returns results when submit_answer is called or the
 // turn limit is reached.
-func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx tools.ToolContext, conn connector.Connector, progress ProgressReporter) (*AgentResult, error) {
-	mode := cfg.Mode
+func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx tools.ToolContext, conn connector.Connector, mode modes.Mode, progress ProgressReporter) (*AgentResult, error) {
 	turnsUsed := 0
 
 	// Auto mode: first turn selects the mode
-	if mode == "auto" {
+	autoMode, isAuto := mode.(*modes.AutoMode)
+	if isAuto {
 		modePrompt := prompt.BuildModeSelectionPrompt(toolCtx)
 		modeMessages := []connector.Message{
 			connector.SystemMessage(modePrompt),
@@ -89,22 +90,29 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		progress.StopSpinner()
 
 		turnsUsed = 1
-		mode = "locate" // default fallback
+		selectedName := "locate" // default fallback
 
 		for _, tc := range toolCalls {
 			if tc.Name == "select_mode" {
 				_, err := tools.ExecuteTool(ctx, "select_mode", json.RawMessage(tc.Arguments), toolCtx)
 				var sm *tools.SelectModeResult
 				if errors.As(err, &sm) {
-					mode = sm.Mode
+					selectedName = sm.Mode
 				}
 				break
 			}
 		}
-		progress.OnToolResult("select_mode", mode)
+		progress.OnToolResult("select_mode", selectedName)
+
+		delegate, err := modes.Resolve(selectedName)
+		if err != nil {
+			delegate, _ = modes.Resolve("locate")
+		}
+		autoMode.SetDelegate(delegate)
 	}
 
 	systemPrompt := prompt.BuildSystemPrompt(toolCtx, cfg.Model, cfg.Think, mode)
+	const tokenBudget = 14000
 	toolDefs := tools.ToolDefinitions()
 
 	messages := []connector.Message{
@@ -113,7 +121,6 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 	}
 
 	var totalTokens int64
-	const tokenBudget = 14000
 	consecutiveEmpty := 0
 
 	for turn := turnsUsed; turn < cfg.MaxTurns; turn++ {
@@ -132,8 +139,8 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 			ParallelToolCalls: true,
 		}
 
-		// Force submit_answer if token budget nearly exhausted or last turn
-		if totalTokens > int64(float64(tokenBudget)*0.8) || remaining <= 0 {
+		// Force submit_answer if mode says so
+		if mode.ShouldForceSubmit(turn, cfg.MaxTurns, totalTokens, tokenBudget) {
 			opts.ForceToolChoice = "submit_answer"
 		}
 
@@ -283,28 +290,13 @@ func RunAgent(ctx context.Context, query string, cfg *config.Config, toolCtx too
 		}
 
 		// Mode-specific turn pressure
-		switch mode {
-		case "locate":
-			if remaining <= 2 {
-				messages = append(messages, connector.SystemMessage(fmt.Sprintf("You're in locate mode with %d turns left. Submit your best match now.", remaining)))
-			}
-		case "explore":
-			budget := cfg.MaxTurns - turnsUsed
-			used := turn - turnsUsed
-			if budget > 0 && float64(used) > float64(budget)*0.6 {
-				messages = append(messages, connector.SystemMessage("You've used over 60% of your budget. Start submitting partial results."))
-			}
-		case "trace":
-			budget := cfg.MaxTurns - turnsUsed
-			used := turn - turnsUsed
-			if budget > 0 && float64(used) > float64(budget)*0.7 {
-				messages = append(messages, connector.SystemMessage("You've used over 70% of your budget. Submit what you have, note if trace is partial."))
-			}
+		if msg := mode.TurnPressure(turn, cfg.MaxTurns, turnsUsed); msg != nil {
+			messages = append(messages, connector.SystemMessage(*msg))
 		}
 
-		// Nudge after 3 consecutive empty results
-		if consecutiveEmpty >= 3 {
-			messages = append(messages, connector.SystemMessage("Your last 3 searches returned no results. Consider trying different search terms, broader patterns, or submit an empty answer if nothing is relevant."))
+		// Nudge after consecutive empty results
+		if msg := mode.ShouldNudge(consecutiveEmpty); msg != nil {
+			messages = append(messages, connector.SystemMessage(*msg))
 			consecutiveEmpty = 0
 		}
 

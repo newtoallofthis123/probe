@@ -17,6 +17,7 @@ import (
 	"github.com/newtoallofthis/probe/internal/config"
 	"github.com/newtoallofthis/probe/internal/connector"
 	"github.com/newtoallofthis/probe/internal/history"
+	"github.com/newtoallofthis/probe/internal/modes"
 	"github.com/newtoallofthis/probe/internal/output"
 	"github.com/newtoallofthis/probe/internal/sandbox"
 	"github.com/newtoallofthis/probe/internal/tools"
@@ -142,7 +143,8 @@ func run() int {
 	cfg.LoadEnv(flagSet)
 
 	// Validate mode
-	if err := config.ValidateMode(cfg.Mode); err != nil {
+	mode, err := modes.Resolve(cfg.Mode)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return ExitError
 	}
@@ -260,7 +262,7 @@ func run() int {
 	}
 
 	progress := output.NewProgress(cfg.Verbose, cfg.Quiet)
-	result, err := agent.RunAgent(ctx, query, &cfg, toolCtx, conn, progress)
+	result, err := agent.RunAgent(ctx, query, &cfg, toolCtx, conn, mode, progress)
 	if err != nil {
 		progress.StopSpinner()
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
