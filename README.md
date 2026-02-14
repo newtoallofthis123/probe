@@ -19,6 +19,7 @@ Ask a question in plain English. Get back file paths and line numbers.
 - [Output formats](#output-formats)
 - [Vim / Neovim integration](#vim--neovim-integration)
 - [Scoped search with `--stdin`](#scoped-search-with---stdin)
+- [Query history](#query-history)
 - [Search modes](#search-modes)
 - [Think mode](#think-mode)
 - [Verbose mode](#verbose-mode)
@@ -127,6 +128,9 @@ probe [flags] <query>
 | `--stdin` | Read file list from stdin to scope the search | |
 | `-v`, `--verbose` | Show agent search trace on stderr | |
 | `-q`, `--quiet` | Suppress all stderr output | |
+| `--list` | List past queries for the current directory | |
+| `--all` | List all past queries across all directories | |
+| `--show <id>` | Show full results of a history entry by ID | |
 | `--version` | Print version and exit | |
 
 ### Environment variables
@@ -275,6 +279,25 @@ git log --since="1 week ago" --name-only --format="" | sort -u | probe --stdin "
 # Search specific files
 find src/api -name "*.go" | probe --stdin "where is the rate limiter?"
 ```
+
+## Query history
+
+probe automatically saves every search result to a local SQLite database. You can recall past queries without re-running the search.
+
+```bash
+# List past queries for the current project
+probe --list
+
+# List all queries across all projects
+probe --all
+
+# Re-display results from a previous search by ID
+probe --show 42
+```
+
+`--list` and `--all` print a table of past queries with their IDs, timestamps, directories, and query text. `--show` re-renders the full results using your current output format settings.
+
+The history database is stored at `~/.local/share/probe/history.db` (or `$XDG_DATA_HOME/probe/history.db`).
 
 ## Search modes
 

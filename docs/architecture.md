@@ -64,6 +64,7 @@ Standard Go project layout with `cmd/` entrypoint and `internal/` packages:
 | `internal/output/` | Progress display and result formatting |
 | `internal/config/` | Config loading (flags > env > file > defaults) |
 | `internal/sandbox/` | Path sandboxing, gitignore filtering |
+| `internal/history/` | SQLite-backed query history (save, list, retrieve) |
 
 ## Development
 

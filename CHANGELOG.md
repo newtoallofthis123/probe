@@ -6,6 +6,7 @@ All notable changes to probe will be documented in this file.
 
 ### Features
 
+- **Query history** (`--list`, `--all`, `--show`) — automatically saves search results to a local SQLite database. Recall past queries and re-display results without re-running the search.
 - **Search modes** (`-m` / `--mode`) — three modes: `locate` (fast, find where something is), `explore` (thorough, understand how something works), `trace` (sequential, follow a call/data path). Default `auto` lets the LLM choose.
 - **Turn-aware pressure** — each turn injects `[Turn N — M remaining]` so the agent calibrates depth vs. urgency. Mode-specific pressure replaces the old hardcoded nudge.
 - **`select_mode` tool** — in auto mode, the first turn forces a `select_mode` tool call so the LLM declares its approach before searching.
