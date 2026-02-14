@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/newtoallofthis/probe/internal/agent"
 	"github.com/newtoallofthis/probe/internal/config"
+	"github.com/newtoallofthis/probe/internal/history"
 	"github.com/newtoallofthis/probe/internal/output"
 	"github.com/newtoallofthis/probe/internal/sandbox"
 	"github.com/newtoallofthis/probe/internal/tools"
@@ -83,6 +85,12 @@ func run() int {
 	var stdinFlag bool
 	flag.BoolVar(&stdinFlag, "stdin", false, "Read file list from stdin (one path per line)")
 	flag.BoolVar(&showVersion, "version", false, "Print version and exit")
+	var listFlag, allFlag, silentFlag bool
+	var showID int
+	flag.BoolVar(&listFlag, "list", false, "List past queries for the current directory")
+	flag.BoolVar(&allFlag, "all", false, "List all past queries across all directories")
+	flag.IntVar(&showID, "show", 0, "Show full results of a history entry by ID")
+	flag.BoolVar(&silentFlag, "silent", false, "Suppress all stderr output")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: probe [flags] <query>\n\nFlags:\n")
@@ -104,6 +112,11 @@ func run() int {
 	// --json overrides --format
 	if jsonFlag {
 		cfg.OutputFormat = "json"
+	}
+
+	// --silent implies --quiet
+	if silentFlag {
+		cfg.Quiet = true
 	}
 
 	// --quiet wins over --verbose
@@ -134,6 +147,56 @@ func run() int {
 	if err := cfg.ResolveProjectDir(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s\n", err)
 		return ExitError
+	}
+
+	// --list / --all / --show: history commands, exit early
+	if listFlag || allFlag || showID > 0 {
+		dbPath, err := history.DBPath()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return ExitError
+		}
+		db, err := history.Open(dbPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return ExitError
+		}
+		defer db.Close()
+		if err := history.Init(db); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return ExitError
+		}
+
+		if showID > 0 {
+			raw, err := history.GetByID(db, int64(showID))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "error: no history entry with id %d\n", showID)
+				return ExitError
+			}
+			var result agent.AgentResult
+			if err := json.Unmarshal([]byte(raw), &result); err != nil {
+				// Legacy entry stored as plain text
+				fmt.Print(raw)
+				return ExitFound
+			}
+			fmt.Print(output.FormatResults(&result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
+			return ExitFound
+		}
+
+		var entries []history.Entry
+		if allFlag {
+			entries, err = history.ListAll(db)
+		} else {
+			entries, err = history.ListByDir(db, cfg.ProjectDir)
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			return ExitError
+		}
+		for _, e := range entries {
+			fmt.Printf("[%d]  %s  %s  %s\n", e.ID, e.Timestamp.Format("2006-01-02 15:04"), e.Dir, e.Query)
+		}
+		return ExitFound
 	}
 
 	// Read file list from stdin if --stdin
@@ -203,8 +266,22 @@ func run() int {
 		return ExitNoResult
 	}
 
-	fmt.Print(output.FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons))
+	formatted := output.FormatResults(result, cfg.OutputFormat, isTTY, useColor, cfg.ShowReasons)
+	fmt.Print(formatted)
 	progress.PrintSummary(len(result.Results))
+
+	// Store in history (best-effort, as JSON for format-independent retrieval)
+	if dbPath, err := history.DBPath(); err == nil {
+		if db, err := history.Open(dbPath); err == nil {
+			defer db.Close()
+			if history.Init(db) == nil {
+				if raw, err := json.Marshal(result); err == nil {
+					history.Insert(db, query, string(raw), cfg.ProjectDir)
+				}
+			}
+		}
+	}
+
 	return ExitFound
 }
 
