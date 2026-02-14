@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/newtoallofthis/probe/internal/modes"
 	"github.com/newtoallofthis/probe/internal/sandbox"
 	"github.com/newtoallofthis/probe/internal/tools"
 )
@@ -20,7 +21,7 @@ func TestBuildSystemPrompt_Fast(t *testing.T) {
 	gi := sandbox.LoadGitIgnore(dir)
 	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
-	prompt := BuildSystemPrompt(tc, "gpt-4", false, "")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false, modes.LocateMode{})
 	if !strings.Contains(prompt, "code search agent") {
 		t.Error("fast prompt should contain 'code search agent'")
 	}
@@ -50,7 +51,7 @@ func TestBuildSystemPrompt_Think(t *testing.T) {
 	gi := sandbox.LoadGitIgnore(dir)
 	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
-	prompt := BuildSystemPrompt(tc, "gpt-4", true, "")
+	prompt := BuildSystemPrompt(tc, "gpt-4", true, modes.LocateMode{})
 	if !strings.Contains(prompt, "Start broad") {
 		t.Error("think prompt should contain 'Start broad'")
 	}
@@ -66,7 +67,7 @@ func TestBuildSystemPrompt_Small(t *testing.T) {
 	gi := sandbox.LoadGitIgnore(dir)
 	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
-	prompt := BuildSystemPrompt(tc, "ministral-3:3b", false, "")
+	prompt := BuildSystemPrompt(tc, "ministral-3:3b", false, modes.LocateMode{})
 	if !strings.Contains(prompt, "Submit early") {
 		t.Error("small model prompt should contain 'Submit early'")
 	}
@@ -235,7 +236,7 @@ func TestBuildSystemPrompt_AllowList(t *testing.T) {
 		AllowList:  []string{filepath.Join(dir, "main.go"), filepath.Join(dir, "config.go")},
 	}
 
-	prompt := BuildSystemPrompt(tc, "gpt-4", false, "")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false, modes.LocateMode{})
 	if !strings.Contains(prompt, "Search scope") {
 		t.Error("prompt should contain 'Search scope' when AllowList is set")
 	}
@@ -261,7 +262,7 @@ func TestBuildSystemPrompt_AllowListTruncation(t *testing.T) {
 
 	gi := sandbox.LoadGitIgnore(dir)
 	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi, AllowList: allowList}
-	prompt := BuildSystemPrompt(tc, "gpt-4", false, "")
+	prompt := BuildSystemPrompt(tc, "gpt-4", false, modes.LocateMode{})
 	if !strings.Contains(prompt, "and 10 more files") {
 		t.Errorf("expected truncation at 50 files, got prompt without truncation message")
 	}
@@ -274,18 +275,19 @@ func TestBuildSystemPrompt_ModeStrategy(t *testing.T) {
 	tc := tools.ToolContext{ProjectDir: dir, GitIgnore: gi}
 
 	tests := []struct {
-		mode string
+		name string
+		mode modes.Mode
 		want string
 	}{
-		{"locate", "LOCATE mode"},
-		{"explore", "EXPLORE mode"},
-		{"trace", "TRACE mode"},
+		{"locate", modes.LocateMode{}, "LOCATE mode"},
+		{"explore", modes.ExploreMode{}, "EXPLORE mode"},
+		{"trace", modes.TraceMode{}, "TRACE mode"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.mode, func(t *testing.T) {
+		t.Run(tt.name, func(t *testing.T) {
 			p := BuildSystemPrompt(tc, "gpt-4", false, tt.mode)
 			if !strings.Contains(p, tt.want) {
-				t.Errorf("prompt for mode %q should contain %q", tt.mode, tt.want)
+				t.Errorf("prompt for mode %q should contain %q", tt.name, tt.want)
 			}
 		})
 	}

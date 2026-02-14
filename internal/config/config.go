@@ -23,6 +23,7 @@ type Config struct {
 	ShowReasons       bool
 	Think             bool
 	Mode              string // "auto", "locate", "explore", "trace"
+	Provider          string // "openai", "anthropic", "google" (auto-detected if empty)
 }
 
 func DefaultConfig() Config {
@@ -67,6 +68,11 @@ func (c *Config) LoadEnv(flagSet map[string]bool) {
 			c.Mode = v
 		}
 	}
+	if !flagSet["provider"] {
+		if v := os.Getenv("PROBE_PROVIDER"); v != "" {
+			c.Provider = v
+		}
+	}
 	if !flagSet["think"] {
 		if v := os.Getenv("PROBE_THINK"); v != "" {
 			c.Think = v == "1" || v == "true"
@@ -103,6 +109,7 @@ type configFile struct {
 	OutputFormat      string `toml:"output_format"`
 	Think             *bool  `toml:"think"`
 	Mode              string `toml:"mode"`
+	Provider          string `toml:"provider"`
 }
 
 // loadConfigFile searches for a config file in standard locations.
@@ -172,15 +179,8 @@ func (c *Config) LoadFile(projectDir string) error {
 	if cf.Mode != "" {
 		c.Mode = cf.Mode
 	}
-	return nil
-}
-
-// ValidateMode checks that the mode string is valid.
-func ValidateMode(mode string) error {
-	switch mode {
-	case "auto", "locate", "explore", "trace":
-		return nil
-	default:
-		return fmt.Errorf("invalid mode '%s': must be auto, locate, explore, or trace", mode)
+	if cf.Provider != "" {
+		c.Provider = cf.Provider
 	}
+	return nil
 }

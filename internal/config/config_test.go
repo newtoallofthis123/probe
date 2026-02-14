@@ -148,14 +148,8 @@ func TestProjectTomlOverridesGlobal(t *testing.T) {
 }
 
 func TestValidateMode(t *testing.T) {
-	for _, mode := range []string{"auto", "locate", "explore", "trace"} {
-		if err := ValidateMode(mode); err != nil {
-			t.Errorf("ValidateMode(%q) returned error: %v", mode, err)
-		}
-	}
-	if err := ValidateMode("bogus"); err == nil {
-		t.Error("ValidateMode(\"bogus\") should return error")
-	}
+	// Mode validation moved to modes.Resolve(); tested in modes package.
+	// Keep this test as a placeholder to verify DefaultConfig still has "auto".
 }
 
 func TestDefaultConfigMode(t *testing.T) {
