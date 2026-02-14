@@ -24,7 +24,7 @@ import (
 	"golang.org/x/term"
 )
 
-const version = "dev"
+const version = "0.2.0"
 
 const (
 	ExitFound    = 0

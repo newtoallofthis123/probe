@@ -4,17 +4,27 @@ All notable changes to probe will be documented in this file.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-02-14
+
 ### Features
 
+- **Multi-provider support** (`--provider`) — use Anthropic, Google, or any OpenAI-compatible API. Provider auto-detected from API key prefix or base URL; override with `--provider anthropic|google|openai`.
 - **Query history** (`--list`, `--all`, `--show`) — automatically saves search results to a local SQLite database. Recall past queries and re-display results without re-running the search.
 - **Search modes** (`-m` / `--mode`) — three modes: `locate` (fast, find where something is), `explore` (thorough, understand how something works), `trace` (sequential, follow a call/data path). Default `auto` lets the LLM choose.
 - **Turn-aware pressure** — each turn injects `[Turn N — M remaining]` so the agent calibrates depth vs. urgency. Mode-specific pressure replaces the old hardcoded nudge.
 - **`select_mode` tool** — in auto mode, the first turn forces a `select_mode` tool call so the LLM declares its approach before searching.
+- **Batch tool call rendering** — parallel tool calls displayed together for cleaner verbose output.
 
 ### Changed
 
 - **`list_dir` renamed to `tree`** — same functionality, clearer name.
-- **`PROBE_MODE` env var** and `mode` config file key added.
+- **`PROBE_MODE` env var**, `PROBE_PROVIDER` env var, and `mode`/`provider` config file keys added.
+
+### Internal
+
+- **Tool registry** — tools are self-contained structs behind a `Tool` interface. Adding a tool = adding a file.
+- **Connector abstraction** — agent loop is provider-agnostic; `agent.go` has zero SDK imports.
+- **Mode extraction** — mode logic lives in self-contained structs behind a `Mode` interface. `agent.go` has zero mode string comparisons.
 
 ## [0.1.0] - 2026-02-14
 
@@ -40,4 +50,5 @@ First public release.
 - GoReleaser setup for cross-platform binary releases
 - Issue templates for bug reports and feature requests
 
+[0.2.0]: https://github.com/newtoallofthis123/probe/releases/tag/v0.2.0
 [0.1.0]: https://github.com/newtoallofthis123/probe/releases/tag/v0.1.0
